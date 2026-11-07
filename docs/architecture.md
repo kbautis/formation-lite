@@ -19,8 +19,8 @@ file export/import.
             ┌──────────────────────────── browser tab ────────────────────────────┐
             │                                                                     │
   user ───▶ │  ui/  (DOM + SVG, no logic)                                         │
-            │   toolbar · songPanel · dancerPanel · stageView · timelineView ·    │
-            │   formationInspector                                                │
+            │   toolbar · notice · stageView · timelineView · transport ·         │
+            │   songPanel · stagePanel · dancerPanel · formationInspector         │
             │        │ dispatches edits            ▲ re-renders on state change   │
             │        ▼                             │                              │
             │  app/store.ts  ── AppState { routine, playhead, view, selection } ─┤
@@ -212,9 +212,10 @@ smaller floor". That would need a second, absolute mode later.
 Straight-line paths keep the model tiny but cannot show dancers curving around each
 other. Collisions mid-transition are visible only by scrubbing.
 
-Using vanilla TypeScript with no UI framework keeps the bundle and the learning surface
-small, at the cost of hand-written re-render code. The UI is small enough (six
-components) for that to stay manageable, and the choice is a two-way door.
+Using vanilla TypeScript with no UI framework keeps the bundle (about 14 kB gzipped) and
+the learning surface small, at the cost of hand-written re-render code. The UI is small enough (nine
+small components, each re-rendering only its own slice of state) for that to stay
+manageable, and the choice is a two-way door.
 
 ## 7. One-Way Doors
 

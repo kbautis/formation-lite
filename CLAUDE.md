@@ -228,8 +228,8 @@ function that throws when it is missing.
 - [x] Verify: smoke test covers export → import on a fresh profile and the phone viewport
 
 ### Task 9 — Deploy
-- [ ] `.github/workflows/deploy.yml`: on push to `main`, run typecheck + test + build and publish `dist/` to GitHub Pages
-- [ ] README: what it is, how to use it, "export is your backup"
+- [x] `.github/workflows/deploy.yml`: on push to `main`, run typecheck + test + build and publish `dist/` to GitHub Pages
+- [x] README: what it is, how to use it, "export is your backup"
 - [ ] Verify: the workflow is green and the Pages URL loads the app (needs Pages enabled in repo settings)
 
 ## Definition of done
