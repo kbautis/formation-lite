@@ -78,6 +78,7 @@ formation-lite/
 │       ├── toolbar.ts            # routine name, routine picker, new/open file/export/delete, save status
 │       ├── transport.ts          # play/pause, time + count readout, add formation, flip, undo/redo, zoom
 │       ├── stagePanel.ts         # open stage vs. real width × depth
+│       ├── sidebarToggle.ts      # Hide/Show panels so the stage gets the full width (per-device preference)
 │       ├── songPanel.ts          # load song, BPM, tap first beat
 │       ├── dancerPanel.ts        # add/rename/recolor/remove dancers
 │       ├── stageView.ts          # SVG stage, grid, dancers, drag, view flip

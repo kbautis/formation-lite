@@ -10,8 +10,10 @@ import { el, svgEl } from "./dom";
 import { initials } from "./format";
 
 const DANCER_RADIUS = 3.4;
-const LABEL_GAP = 3;
-const AUDIENCE_GAP = 7;
+/** Labels sit inside the wings strip so the view can be framed tightly around the stage. */
+const GRID_LABEL_OFFSET = 3.5;
+const EDGE_LABEL_INSET = 2;
+const VIEW_PADDING = 1;
 
 interface DancerNode {
   readonly group: SVGGElement;
@@ -139,12 +141,14 @@ function renderGrid(svg: SVGSVGElement, layer: SVGGElement, state: AppState, vie
   const height = SVG_STAGE_HEIGHT;
   const marginX = width * WING_MARGIN;
   const marginY = height * WING_MARGIN;
-  const extra = AUDIENCE_GAP + 4;
-  svg.setAttribute("viewBox", `${-marginX - 6} ${-marginY - extra} ${width + 2 * marginX + 12} ${height + 2 * marginY + 2 * extra}`);
+  svg.setAttribute(
+    "viewBox",
+    `${-marginX - VIEW_PADDING} ${-marginY - VIEW_PADDING} ${width + 2 * (marginX + VIEW_PADDING)} ${height + 2 * (marginY + VIEW_PADDING)}`,
+  );
 
   const grid = gridLines(state.routine.stage);
   const toView = (position: Position) => stageToSvg(toViewCoords(position, view), aspect);
-  const downstageY = view === "audience" ? height + LABEL_GAP + 1 : -LABEL_GAP;
+  const downstageY = view === "audience" ? height + GRID_LABEL_OFFSET : -GRID_LABEL_OFFSET + 1;
   const unit = state.routine.stage.size?.unit ?? "";
 
   const nodes: SVGElement[] = [
@@ -162,8 +166,12 @@ function renderGrid(svg: SVGSVGElement, layer: SVGGElement, state: AppState, vie
     const right = toView({ x: 1, y: line.position });
     nodes.push(svgEl("line", { class: "grid-line", x1: left.x, y1: left.y, x2: right.x, y2: right.y }));
   }
-  const audienceY = view === "audience" ? height + marginY + AUDIENCE_GAP : -marginY - AUDIENCE_GAP + 2;
+  // Audience and upstage labels sit at the outer edge of the wings, on opposite sides.
+  const outerBottom = height + marginY - EDGE_LABEL_INSET;
+  const outerTop = -marginY + EDGE_LABEL_INSET + 2;
+  const audienceY = view === "audience" ? outerBottom : outerTop;
+  const upstageY = view === "audience" ? outerTop : outerBottom;
   nodes.push(svgEl("text", { class: "audience-label", x: width / 2, y: audienceY, "text-anchor": "middle" }, [`AUDIENCE${unit ? ` · grid in ${unit}` : ""}`]));
-  nodes.push(svgEl("text", { class: "upstage-label", x: width / 2, y: view === "audience" ? -marginY - 3 : height + marginY + 5, "text-anchor": "middle" }, ["UPSTAGE"]));
+  nodes.push(svgEl("text", { class: "upstage-label", x: width / 2, y: upstageY, "text-anchor": "middle" }, ["UPSTAGE"]));
   layer.replaceChildren(...nodes);
 }

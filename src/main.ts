@@ -7,6 +7,7 @@ import { mountDancerPanel } from "./ui/dancerPanel";
 import { mountFormationInspector } from "./ui/formationInspector";
 import { mountKeyboard } from "./ui/keyboard";
 import { mountNotice } from "./ui/notice";
+import { mountSidebarToggle } from "./ui/sidebarToggle";
 import { mountSongPanel } from "./ui/songPanel";
 import { mountStagePanel } from "./ui/stagePanel";
 import { mountStageView } from "./ui/stageView";
@@ -62,7 +63,7 @@ async function boot(): Promise<void> {
   const stageSection = el("section", { class: "panel" });
   const dancerSection = el("section", { class: "panel" });
   const formationSection = el("section", { class: "panel" });
-  const sidebar = el("aside", { class: "sidebar", "data-edit-only": true }, [formationSection, dancerSection, songSection, stageSection]);
+  const sidebar = el("aside", { id: "sidebar", class: "sidebar", "data-edit-only": true }, [formationSection, dancerSection, songSection, stageSection]);
   const transport = el("div", { class: "transport" });
   const timeline = el("div", { class: "timeline" });
   root.append(
@@ -80,6 +81,7 @@ async function boot(): Promise<void> {
   mountDancerPanel(dancerSection, controller, newId);
   mountFormationInspector(formationSection, controller, newId);
   mountTransport(transport, controller, newId);
+  mountSidebarToggle(transport);
   mountTimelineView(timeline, controller);
   mountKeyboard(controller);
 

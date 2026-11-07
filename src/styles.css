@@ -154,20 +154,38 @@ input[type="checkbox"] { min-height: auto; }
 [hidden] { display: none !important; }
 
 /* Workspace */
+/* The stage is the primary surface: it takes all space the sidebar doesn't need. */
 .workspace {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 300px;
+  grid-template-columns: minmax(0, 1fr) 264px;
   min-height: 0;
 }
+body.sidebar-hidden .sidebar { display: none; }
+body.sidebar-hidden .workspace { grid-template-columns: minmax(0, 1fr); }
 .stage-area {
   position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 12px;
+  padding: 8px 12px 4px;
 }
 .stage-svg { flex: 1; width: 100%; min-height: 0; touch-action: none; user-select: none; }
-.stage-hint { margin: 4px 0 0; text-align: center; color: var(--muted); min-height: 1.4em; }
+/* The hint floats over the bottom of the stage so it doesn't take height from it. */
+.stage-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  translate: -50% 0;
+  margin: 0;
+  max-width: calc(100% - 24px);
+  padding: 2px 10px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  color: var(--muted);
+  text-align: center;
+  pointer-events: none;
+}
+.stage-hint:empty { display: none; }
 
 .wings { fill: var(--wings); stroke: var(--border); stroke-width: 0.3; stroke-dasharray: 1.5 1.5; }
 .floor { fill: var(--floor); stroke: var(--grid-center); stroke-width: 0.5; }

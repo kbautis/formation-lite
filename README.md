@@ -22,7 +22,8 @@ are no accounts and nothing to pay for, and your routines stay on your device.
    spots.
 
 Click a formation on the timeline to jump to it and edit its name, start time, or hold
-length. ←/→ step one count (or one second without a BPM). Ctrl/⌘+Z undoes.
+length. **Hide panels** (bottom right) gives the stage the full width; this device
+remembers the choice. ←/→ step one count (or one second without a BPM). Ctrl/⌘+Z undoes.
 
 ### Sharing with your team
 

@@ -174,6 +174,27 @@ async function main() {
     await page.check("text=Set the real stage size");
     check((await page.locator(".audience-label").textContent()).includes("ft"), "setting a stage size shows real units");
 
+    // The stage takes precedence: the floor fills most of the stage area, and hiding the sidebar widens it.
+    const floorShare = await page.evaluate(() => {
+      const floor = document.querySelector(".floor").getBoundingClientRect();
+      const svg = document.querySelector(".stage-svg").getBoundingClientRect();
+      return Math.max(floor.width / svg.width, floor.height / svg.height);
+    });
+    check(floorShare >= 0.8, `the stage floor fills most of the stage area (${Math.round(floorShare * 100)}%)`);
+    // A wide floor is limited by the window's width, which is where hiding the sidebar helps.
+    await page.fill("input[aria-label='Stage width']", "60");
+    await page.press("input[aria-label='Stage width']", "Enter");
+    await page.fill("input[aria-label='Stage depth']", "25");
+    await page.press("input[aria-label='Stage depth']", "Enter");
+    const floorWidthWithSidebar = (await page.locator(".floor").boundingBox()).width;
+    await page.click("text=Hide panels");
+    check(!(await page.locator(".sidebar").isVisible()), "hide panels hides the sidebar");
+    const floorWidthWithoutSidebar = (await page.locator(".floor").boundingBox()).width;
+    check(floorWidthWithoutSidebar > floorWidthWithSidebar, `hiding panels makes the stage bigger (${Math.round(floorWidthWithSidebar)} → ${Math.round(floorWidthWithoutSidebar)} px)`);
+    await page.screenshot({ path: path.join(ARTIFACTS, "desktop-panels-hidden.png") });
+    await page.click("text=Show panels");
+    check(await page.locator(".sidebar").isVisible(), "show panels brings the sidebar back");
+
     await page.screenshot({ path: path.join(ARTIFACTS, "desktop.png") });
 
     // ── Reload: everything is still there ───────────────────────────────────
