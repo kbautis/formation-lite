@@ -192,10 +192,10 @@ function that throws when it is missing.
 - [x] Verify: tests for hold, mid-transition, boundaries, zero-length transitions, flip, and grid steps for 10/40/100-unit stages
 
 ### Task 4 — Edits and history
-- [ ] `model/edits.ts`: `renameRoutine`, `addDancer` (adds a position to every formation), `updateDancer`, `removeDancer` (removes it everywhere), `addFormationAt`, `updateFormationTiming`, `renameFormation`, `removeFormation`, `moveDancer`, `setStageSize`, `setTempo`, `setSongInfo`
-- [ ] Every edit returns a new routine that passes `parseRoutine`, and throws `EditError` on preconditions in architecture §9
-- [ ] `model/history.ts`: `createHistory`, `pushHistory`, `undo`, `redo`, capped at 100 entries
-- [ ] Verify: tests for each edit, each precondition, and undo/redo round-trips
+- [x] `model/edits.ts`: `renameRoutine`, `addDancer` (adds a position to every formation), `updateDancer`, `removeDancer` (removes it everywhere), `addFormationAt`, `updateFormationTiming`, `renameFormation`, `removeFormation`, `moveDancer`, `setStageSize`, `setTempo`, `setSongInfo`, `touchRoutine`, `editableFormationAt`
+- [x] Every edit returns a new routine that passes `parseRoutine`, and throws `EditError` on preconditions in architecture §9
+- [x] `model/history.ts`: `createHistory`, `pushHistory`, `undo`, `redo`, capped at 100 entries
+- [x] Verify: tests for each edit, each precondition, and undo/redo round-trips
 
 ### Task 5 — Storage
 - [ ] `storage/database.ts`, `storage/routines.ts`, `storage/songs.ts` per architecture §4.4
