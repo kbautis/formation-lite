@@ -54,7 +54,7 @@ formation-lite/
 │   │   ├── factory.ts            # createRoutine, createDancer, nextColor
 │   │   └── history.ts            # undo/redo stack of Routine snapshots
 │   ├── io/
-│   │   ├── serialize.ts          # serializeRoutine (pure), routineFileName
+│   │   ├── serialize.ts          # serializeRoutine, parseRoutineFile, routineFileName, songDurationsMatch (pure)
 │   │   └── files.ts              # downloadRoutine, readRoutineFile (browser glue)
 │   ├── storage/
 │   │   ├── database.ts           # openDatabase(factory), runRequest, StorageError
@@ -203,10 +203,10 @@ function that throws when it is missing.
 - [x] Verify: tests run against `fake-indexeddb` (save → load round-trip, list, delete, corrupt record)
 
 ### Task 6 — Playback clock and serialization
-- [ ] `playback/clock.ts`: `PlaybackClock` interface and `SilentClock(now: () => number)`
-- [ ] `playback/audioClock.ts`: `AudioClock(audioElement)`
-- [ ] `io/serialize.ts`: `serializeRoutine`, `routineFileName`; `io/files.ts` download/read glue
-- [ ] Verify: SilentClock tests with a fake time source; serialize → parse round-trip test
+- [x] `playback/clock.ts`: `PlaybackClock` interface and `SilentClock(now: () => number)`
+- [x] `playback/audioClock.ts`: `AudioClock(audioElement)`
+- [x] `io/serialize.ts`: `serializeRoutine`, `routineFileName`; `io/files.ts` download/read glue
+- [x] Verify: SilentClock tests with a fake time source; serialize → parse round-trip test
 
 ### Task 7 — App shell and editing UI
 - [ ] `app/state.ts`, `app/store.ts`, `app/controller.ts` (edits → history → autosave; rAF playback loop)
