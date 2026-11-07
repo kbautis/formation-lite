@@ -121,8 +121,8 @@ start offstage and enter. Normalized coordinates are what make "set the stage si
 everything scales" (W4) a no-op for the data: only rendering changes.
 
 The open stage (`size: null`) renders at a 4:3 aspect with an 8 × 6 grid. A sized stage
-renders at `width:depth`, with grid lines every 1, 2, 5, or 10 units, picking the
-smallest step that keeps at most 20 cells across. The front edge carries spacing numbers
+renders at `width:depth`, with grid lines every 1, 2, 5, 10, 25, 50, or 100 units,
+picking the smallest step that keeps at most 20 cells across the longer side. The front edge carries spacing numbers
 counting outward from the center line, like floor tape.
 
 The dancer's view (W6) is a rendering transform only: `(x, y) → (1 − x, 1 − y)`, which

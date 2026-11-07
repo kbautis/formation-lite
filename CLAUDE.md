@@ -47,8 +47,9 @@ formation-lite/
 │   │   ├── errors.ts             # RoutineFormatError, EditError
 │   │   ├── validate.ts           # parseRoutine(unknown) → Routine, throws field-level errors
 │   │   ├── interpolate.ts        # positionsAt(routine, t), activeFormationAt(routine, t)
-│   │   ├── tempo.ts              # beatAt, countLabelAt, snapToBeat, beatsToSeconds
-│   │   ├── stage.ts              # stageAspect, gridStep, gridLines, toViewCoords (flip)
+│   │   ├── tempo.ts              # beatAt, countLabelAt, snapToBeat, beatsToSeconds, beatTimesBetween
+│   │   ├── time.ts               # formatTime (m:ss.t)
+│   │   ├── stage.ts              # stageAspect, gridStep, gridLines, toViewCoords (flip), SVG mapping, clampToWings
 │   │   ├── edits.ts              # immutable edit functions on Routine
 │   │   ├── factory.ts            # createRoutine, createDancer, nextColor
 │   │   └── history.ts            # undo/redo stack of Routine snapshots
@@ -185,10 +186,10 @@ function that throws when it is missing.
 - [x] Verify: tests cover every rule in the §4.1 table (one valid, one invalid case each)
 
 ### Task 3 — Timeline math
-- [ ] `model/interpolate.ts`: `activeFormationAt`, `positionsAt` with smoothstep easing; before-first and after-last clamps
-- [ ] `model/tempo.ts`: `beatAt`, `countLabelAt` ("8-count 3 · 5"), `snapToBeat`, `beatsToSeconds`
-- [ ] `model/stage.ts`: `stageAspect`, `gridStep`, `gridLines`, `toViewCoords(position, view)` for audience and dancer views
-- [ ] Verify: tests for hold, mid-transition, boundaries, zero-length transitions, flip, and grid steps for 10/40/100-unit stages
+- [x] `model/interpolate.ts`: `activeFormationAt`, `positionsAt` with smoothstep easing; before-first and after-last clamps
+- [x] `model/tempo.ts`: `beatAt`, `countLabelAt` ("8-count 3 · 5"), `snapToBeat`, `beatsToSeconds`
+- [x] `model/stage.ts`: `stageAspect`, `gridStep`, `gridLines`, `toViewCoords(position, view)` for audience and dancer views
+- [x] Verify: tests for hold, mid-transition, boundaries, zero-length transitions, flip, and grid steps for 10/40/100-unit stages
 
 ### Task 4 — Edits and history
 - [ ] `model/edits.ts`: `renameRoutine`, `addDancer` (adds a position to every formation), `updateDancer`, `removeDancer` (removes it everywhere), `addFormationAt`, `updateFormationTiming`, `renameFormation`, `removeFormation`, `moveDancer`, `setStageSize`, `setTempo`, `setSongInfo`
