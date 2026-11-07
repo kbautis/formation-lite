@@ -40,8 +40,10 @@ formation-lite/
 ├── scripts/
 │   └── smoke.mjs                 # Playwright smoke test against the built site
 ├── src/
-│   ├── main.ts                   # entry: boot storage, store, UI
-│   ├── styles.css                # all styles, light/dark tokens
+│   ├── main.ts                   # entry: boot storage, build layout, mount UI, start controller
+│   ├── appInfo.ts                # APP_NAME
+│   ├── vite-env.d.ts             # Vite client types (CSS imports)
+│   ├── styles.css                # all styles, light/dark tokens, phone view-only layout
 │   ├── model/                    # PURE: no DOM, no I/O, no clock
 │   │   ├── types.ts              # Routine, Dancer, Formation, Position, StageSize, Tempo
 │   │   ├── errors.ts             # RoutineFormatError, EditError
@@ -50,6 +52,7 @@ formation-lite/
 │   │   ├── tempo.ts              # beatAt, countLabelAt, snapToBeat, beatsToSeconds, beatTimesBetween
 │   │   ├── time.ts               # formatTime (m:ss.t)
 │   │   ├── stage.ts              # stageAspect, gridStep, gridLines, toViewCoords (flip), SVG mapping, clampToWings
+│   │   ├── timeline.ts           # timelineDurationSeconds, rulerStepSeconds
 │   │   ├── edits.ts              # immutable edit functions on Routine
 │   │   ├── factory.ts            # createRoutine, createDancer, nextColor
 │   │   └── history.ts            # undo/redo stack of Routine snapshots
@@ -69,7 +72,12 @@ formation-lite/
 │   │   └── controller.ts         # dispatches edits, history, autosave, playback loop
 │   └── ui/
 │       ├── dom.ts                # tiny element/SVG helpers
-│       ├── toolbar.ts            # routine name, routines menu, import/export, undo/redo
+│       ├── format.ts             # initials (display formatting)
+│       ├── keyboard.ts           # Space, ←/→, undo/redo shortcuts
+│       ├── notice.ts             # toast notices + "not saving" banner
+│       ├── toolbar.ts            # routine name, routine picker, new/open file/export/delete, save status
+│       ├── transport.ts          # play/pause, time + count readout, add formation, flip, undo/redo, zoom
+│       ├── stagePanel.ts         # open stage vs. real width × depth
 │       ├── songPanel.ts          # load song, BPM, tap first beat
 │       ├── dancerPanel.ts        # add/rename/recolor/remove dancers
 │       ├── stageView.ts          # SVG stage, grid, dancers, drag, view flip
@@ -209,15 +217,15 @@ function that throws when it is missing.
 - [x] Verify: SilentClock tests with a fake time source; serialize → parse round-trip test
 
 ### Task 7 — App shell and editing UI
-- [ ] `app/state.ts`, `app/store.ts`, `app/controller.ts` (edits → history → autosave; rAF playback loop)
-- [ ] `ui/*` components per the project structure; editing only while the playhead is in a formation hold
-- [ ] Verify: `npm run smoke` creates a routine, adds 3 dancers, adds 2 formations, plays, reloads, and finds the routine still there
+- [x] `app/state.ts`, `app/store.ts`, `app/controller.ts` (edits → history → autosave; rAF playback loop)
+- [x] `ui/*` components per the project structure; editing only while the playhead is in a formation hold
+- [x] Verify: `npm run smoke` creates a routine, adds 3 dancers, adds 2 formations, plays, reloads, and finds the routine still there
 
 ### Task 8 — Sharing and phone layout
-- [ ] Export/import with replace prompt, song-duration warning, and song kept across re-imports
-- [ ] Phone layout (≤ 720 px wide): stage + timeline + play/flip only; editing hidden
-- [ ] Persistent-storage request and "Not saving on this device" banner when IndexedDB fails
-- [ ] Verify: smoke test covers export → import on a fresh profile and the phone viewport
+- [x] Export/import with replace prompt, song-duration warning, and song kept across re-imports
+- [x] Phone layout (≤ 720 px wide): stage + timeline + play/flip only; editing hidden
+- [x] Persistent-storage request and "Not saving on this device" banner when IndexedDB fails
+- [x] Verify: smoke test covers export → import on a fresh profile and the phone viewport
 
 ### Task 9 — Deploy
 - [ ] `.github/workflows/deploy.yml`: on push to `main`, run typecheck + test + build and publish `dist/` to GitHub Pages

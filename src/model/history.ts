@@ -40,3 +40,8 @@ export function redo(history: History): History {
   if (!next) throw new EditError("Nothing to redo.");
   return { past: [...history.past, history.present], present: next, future: rest };
 }
+
+/** For metadata the user doesn't think of as an edit (e.g. song info): changes the present, keeps the undo stack. */
+export function replacePresent(history: History, present: Routine): History {
+  return { ...history, present };
+}

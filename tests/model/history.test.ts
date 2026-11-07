@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HISTORY_LIMIT, canRedo, canUndo, createHistory, pushHistory, redo, undo } from "../../src/model/history";
+import { HISTORY_LIMIT, canRedo, canUndo, createHistory, pushHistory, redo, replacePresent, undo } from "../../src/model/history";
 import { EditError } from "../../src/model/errors";
 import { renameRoutine } from "../../src/model/edits";
 import { validRoutineInput } from "../fixtures/routines";
@@ -45,5 +45,14 @@ describe("history", () => {
   it("throws when there is nothing to undo or redo", () => {
     expect(() => undo(createHistory(first))).toThrow(EditError);
     expect(() => redo(createHistory(first))).toThrow(EditError);
+  });
+});
+
+describe("replacePresent", () => {
+  it("swaps the present without adding an undo step", () => {
+    const history = replacePresent(pushHistory(createHistory(first), second), third);
+    expect(history.present.name).toBe("Third");
+    expect(history.past).toHaveLength(1);
+    expect(undo(history).present.name).toBe("Regionals 2027");
   });
 });
