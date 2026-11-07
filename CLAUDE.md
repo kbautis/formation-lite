@@ -178,11 +178,11 @@ function that throws when it is missing.
 - [x] Verify: `npm run typecheck`, `npm test` (one placeholder-free sanity test), and `npm run build` all succeed
 
 ### Task 2 — Routine model and validator
-- [ ] `model/types.ts`: types exactly as `docs/architecture.md` §4.1
-- [ ] `model/errors.ts`: `RoutineFormatError(path, message)`, `EditError(message)`
-- [ ] `model/validate.ts`: `parseRoutine(input: unknown): Routine` enforcing every rule in the §4.1 table, with the field path in each error
-- [ ] `model/factory.ts`: `createRoutine(name, now, id)`, `createDancer(name, existing)`, `nextColor(existingDancers)` from a fixed 20-color palette
-- [ ] Verify: tests cover every rule in the §4.1 table (one valid, one invalid case each)
+- [x] `model/types.ts`: types exactly as `docs/architecture.md` §4.1
+- [x] `model/errors.ts`: `RoutineFormatError(path, message)`, `EditError(message)`
+- [x] `model/validate.ts`: `parseRoutine(input: unknown): Routine` enforcing every rule in the §4.1 table, with the field path in each error
+- [x] `model/factory.ts`: `createRoutine(name, now, id)`, `createDancer(name, existing)`, `nextColor(existingDancers)` from a fixed 20-color palette
+- [x] Verify: tests cover every rule in the §4.1 table (one valid, one invalid case each)
 
 ### Task 3 — Timeline math
 - [ ] `model/interpolate.ts`: `activeFormationAt`, `positionsAt` with smoothstep easing; before-first and after-last clamps

@@ -108,8 +108,8 @@ naming the field):
 | `stage.size` | `null` = open stage. Otherwise `width` and `depth` are numbers in (0, 500] and `unit` is `"ft"` or `"m"`. |
 | `song` | `null` or `{ fileName, durationSeconds > 0 }`. Metadata only; the audio is never in this document. |
 | `tempo` | `null` = no BPM (time-only timeline). Otherwise `bpm` in [40, 300] and `firstBeatSeconds` ≥ 0. |
-| `dancers` | 0–40 entries, unique `id`s, `name` 1–40 characters, `color` as `#rrggbb`. |
-| `formations` | Sorted by `startSeconds`, `startSeconds` ≥ 0, `holdSeconds` ≥ 0, and no overlap: `start[i] + hold[i] ≤ start[i+1]`. |
+| `dancers` | 0–40 entries, unique `id`s, `name` 1–40 characters, `color` as lowercase `#rrggbb`. |
+| `formations` | At least one, unique `id`s, `name` 0–40 characters, sorted by `startSeconds`, `startSeconds` ≥ 0, `holdSeconds` ≥ 0, and no overlap: `start[i] + hold[i] ≤ start[i+1]`. New routines start with one "Opening" formation at 0 s. |
 | `positions` | Exactly one entry per dancer in every formation. `x` and `y` are in [−0.1, 1.1]. |
 
 ### 4.2 Coordinate system
