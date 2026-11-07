@@ -166,6 +166,22 @@ async function main() {
     await page.click("text=Redo");
     check((await dancerTransform(page, "Ben Ito")) === secondSpot, "redo moves the dancer again");
 
+    // Dragging a formation's right edge lengthens its hold; the sidebar shows it live; undo restores it.
+    const holdInput = page.locator("input[aria-label='Hold length']");
+    const holdBefore = Number(await holdInput.inputValue());
+    const handleBox = await page.locator(".formation-block").nth(1).locator("[data-hold-handle]").boundingBox();
+    await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handleBox.x + 40, handleBox.y + handleBox.height / 2, { steps: 4 });
+    await page.mouse.move(handleBox.x + 80, handleBox.y + handleBox.height / 2, { steps: 4 });
+    await page.mouse.up();
+    const holdAfter = Number(await holdInput.inputValue());
+    check(holdAfter > holdBefore, `dragging a formation's edge lengthens its hold (${holdBefore} → ${holdAfter} counts)`);
+    check(Number.isInteger(holdAfter), "a dragged hold snaps to whole counts when there is a BPM");
+    check((await page.locator(".formation-editor .hint").textContent()).includes("Holds until"), "the sidebar says when the hold ends");
+    await page.click("text=Undo");
+    check(Number(await holdInput.inputValue()) === holdBefore, "undo restores the hold in one step");
+
     await seekTimeline(page, 3.5);
     const midTransition = await dancerTransform(page, "Ben Ito");
     check(midTransition !== secondSpot && midTransition !== openingSpot, "between formations the dancer is somewhere in between");

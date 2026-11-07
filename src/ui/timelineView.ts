@@ -3,6 +3,8 @@
 // The content rebuilds when the routine or zoom changes; the playhead moves every frame.
 // In fit mode (the default) it measures its own width and asks the controller to zoom so
 // the whole timeline fits: on mount, on resize, and when the timeline's length changes.
+// Dragging a block's right-edge handle changes its hold. The zoom is frozen during that
+// drag (refit afterwards), or a growing timeline would rezoom under the pointer.
 import type { Controller } from "../app/controller";
 import type { AppState } from "../app/state";
 import { activeFormationAt, holdEnd } from "../model/interpolate";
@@ -36,11 +38,21 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
   new ResizeObserver(refit).observe(scroller);
 
   let scrubbingPointer: number | null = null;
+  let holdDragPointer: number | null = null;
   const secondsAt = (event: PointerEvent) => {
     const bounds = content.getBoundingClientRect();
     return (event.clientX - bounds.left) / controller.store.getState().pixelsPerSecond;
   };
   content.addEventListener("pointerdown", (event) => {
+    const handle = (event.target as Element).closest<HTMLElement>("[data-hold-handle]");
+    if (handle) {
+      event.preventDefault();
+      if (controller.beginHoldDrag(handle.dataset.holdHandle!)) {
+        holdDragPointer = event.pointerId;
+        content.setPointerCapture(event.pointerId);
+      }
+      return;
+    }
     const block = (event.target as Element).closest<HTMLElement>("[data-formation-start]");
     if (block) {
       controller.pause();
@@ -53,9 +65,15 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
   });
   content.addEventListener("pointermove", (event) => {
     if (event.pointerId === scrubbingPointer) controller.seek(secondsAt(event));
+    if (event.pointerId === holdDragPointer) controller.dragHoldTo(secondsAt(event));
   });
   const stopScrub = (event: PointerEvent) => {
     if (event.pointerId === scrubbingPointer) scrubbingPointer = null;
+    if (event.pointerId === holdDragPointer) {
+      holdDragPointer = null;
+      controller.endHoldDrag();
+      refit();
+    }
   };
   content.addEventListener("pointerup", stopScrub);
   content.addEventListener("pointercancel", stopScrub);
@@ -96,6 +114,9 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
       ...routine.formations.map((formation, index) => {
         const width = Math.max(MIN_BLOCK_WIDTH_PIXELS, formation.holdSeconds * pixelsPerSecond);
         const label = formation.name || `Formation ${index + 1}`;
+        const handle = state.canEdit
+          ? [el("span", { class: "hold-handle", "data-hold-handle": formation.id, title: "Drag to change how long this formation holds" })]
+          : [];
         return el(
           "button",
           {
@@ -105,7 +126,7 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
             title: `${label} · ${formatTime(formation.startSeconds)}–${formatTime(holdEnd(formation))}`,
             "data-formation-start": formation.startSeconds,
           },
-          [label],
+          [el("span", { class: "formation-label" }, [label]), ...handle],
         );
       }),
     );
@@ -127,11 +148,13 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
 
   controller.store.subscribe((next, previous) => {
     const lengthChanged = timelineDurationSeconds(next.routine) !== timelineDurationSeconds(previous.routine);
-    if (next.timelineFit && (lengthChanged || !previous.timelineFit)) {
+    if (next.timelineFit && holdDragPointer === null && (lengthChanged || !previous.timelineFit)) {
       refit();
       next = controller.store.getState();
     }
-    if (next.routine !== previous.routine || next.pixelsPerSecond !== previous.pixelsPerSecond) renderContent(next);
+    if (next.routine !== previous.routine || next.pixelsPerSecond !== previous.pixelsPerSecond || next.canEdit !== previous.canEdit) {
+      renderContent(next);
+    }
     if (next.playheadSeconds !== previous.playheadSeconds || next.routine !== previous.routine || next.pixelsPerSecond !== previous.pixelsPerSecond) {
       renderPlayhead(next);
     }

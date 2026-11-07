@@ -85,6 +85,7 @@ button:disabled { opacity: 0.45; cursor: default; }
 button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
 button.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
 button.danger { color: var(--danger); }
+button[aria-pressed="true"] { background: var(--surface-2); font-weight: 600; }
 .icon-button { padding: 4px 10px; }
 
 input, select {
@@ -250,7 +251,7 @@ body.sidebar-hidden .workspace { grid-template-columns: minmax(0, 1fr); }
   height: 44px;
   min-height: 0;
   justify-content: flex-start;
-  overflow: hidden;
+  overflow: visible;
   padding: 0 6px;
   border: 1px solid color-mix(in srgb, var(--block-active) 40%, transparent);
   border-radius: 6px;
@@ -261,6 +262,31 @@ body.sidebar-hidden .workspace { grid-template-columns: minmax(0, 1fr); }
 }
 .formation-block:hover:not(:disabled) { background: var(--block); filter: brightness(0.97); }
 .formation-block.active { background: var(--block-active); color: var(--accent-text); }
+.formation-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* Right-edge grip for dragging the hold; it overhangs the block so short holds stay grabbable. */
+.hold-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: -6px;
+  width: 12px;
+  z-index: 1;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.hold-handle::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 4px;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--block-active);
+  opacity: 0.55;
+}
+.formation-block.active .hold-handle::after { background: var(--accent-text); }
+.hold-handle:hover::after { opacity: 1; }
 .playhead {
   position: absolute;
   top: 0;

@@ -2,8 +2,10 @@
 import { EditError, RoutineFormatError } from "../model/errors";
 import {
   editableFormationAt,
+  holdSecondsForEnd,
   moveDancer,
   setSongInfo,
+  updateFormationTiming,
 } from "../model/edits";
 import { createRoutine } from "../model/factory";
 import { canRedo, canUndo, createHistory, pushHistory, redo, replacePresent, undo, type History } from "../model/history";
@@ -50,11 +52,17 @@ interface DragSession {
   readonly before: Routine;
 }
 
+interface HoldDragSession {
+  readonly formationId: string;
+  readonly before: Routine;
+}
+
 export class Controller {
   readonly store: Store<AppState>;
   private readonly deps: ControllerDependencies;
   private clock: PlaybackClock;
   private drag: DragSession | null = null;
+  private holdDrag: HoldDragSession | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
   private animationFrame: number | null = null;
@@ -225,15 +233,51 @@ export class Controller {
     const drag = this.drag;
     if (!drag) return;
     this.drag = null;
-    if (this.state.routine === drag.before) return;
-    const history = pushHistory(replacePresent(this.state.history, drag.before), this.state.routine);
+    this.finishDrag(drag.before);
+  }
+
+  /** Starts dragging a formation's end on the timeline. Moves the playhead into it so the sidebar shows its hold. */
+  beginHoldDrag(formationId: string): boolean {
+    if (!this.state.canEdit) return false;
+    const formation = this.state.routine.formations.find((candidate) => candidate.id === formationId);
+    if (!formation) throw new EditError(`No formation with id "${formationId}".`);
+    this.pause();
+    this.seek(formation.startSeconds);
+    this.holdDrag = { formationId, before: this.state.routine };
+    return true;
+  }
+
+  dragHoldTo(endSeconds: number): void {
+    const drag = this.holdDrag;
+    if (!drag) return;
+    const routine = this.state.routine;
+    const formation = routine.formations.find((candidate) => candidate.id === drag.formationId)!;
+    const holdSeconds = holdSecondsForEnd(routine, drag.formationId, endSeconds);
+    if (holdSeconds === formation.holdSeconds) return;
+    this.store.setState({
+      routine: updateFormationTiming(routine, drag.formationId, { startSeconds: formation.startSeconds, holdSeconds }),
+    });
+  }
+
+  endHoldDrag(): void {
+    const drag = this.holdDrag;
+    if (!drag) return;
+    this.holdDrag = null;
+    this.finishDrag(drag.before);
+  }
+
+  /** Records a finished drag as one undo step: from the routine before it to the routine now. */
+  private finishDrag(before: Routine): void {
+    if (this.state.routine === before) return;
+    const history = pushHistory(replacePresent(this.state.history, before), this.state.routine);
     this.commit(this.state.routine, history);
   }
 
   private cancelDrag(): void {
-    if (!this.drag) return;
-    this.store.setState({ routine: this.drag.before });
+    const before = this.drag?.before ?? this.holdDrag?.before;
     this.drag = null;
+    this.holdDrag = null;
+    if (before) this.store.setState({ routine: before });
   }
 
   // ── Playback ──────────────────────────────────────────────────────────────

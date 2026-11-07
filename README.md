@@ -22,7 +22,8 @@ are no accounts and nothing to pay for, and your routines stay on your device.
    spots.
 
 Click a formation on the timeline to jump to it and edit its name, start time, or hold
-length. The timeline fits the whole song in the window; **−/+** zoom in for detail and **Fit**
+length. Drag a formation's right edge on the timeline to make it hold longer or shorter;
+it snaps to the beat when a BPM is set and stops at the next formation. The timeline fits the whole song in the window; **−/+** zoom in for detail and **Fit**
 shows the whole song again. **Hide panels** (bottom right) gives the stage the full width; this device
 remembers the choice. ←/→ step one count (or one second without a BPM). Ctrl/⌘+Z undoes.
 

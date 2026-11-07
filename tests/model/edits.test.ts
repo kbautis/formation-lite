@@ -6,6 +6,7 @@ import {
   addFormationAt,
   defaultSpot,
   editableFormationAt,
+  holdSecondsForEnd,
   moveDancer,
   removeDancer,
   removeFormation,
@@ -229,5 +230,29 @@ describe("editableFormationAt", () => {
   });
   it("refuses mid-transition, where positions are not stored facts", () => {
     expect(() => editableFormationAt(base, 3)).toThrow(EditError);
+  });
+});
+
+describe("holdSecondsForEnd", () => {
+  // untimed: f-1 holds 0–2 s, f-2 starts at 4 s. base: same, with 120 BPM from 0.5 s.
+  it("is the time from the formation's start to the dragged end", () => {
+    expect(holdSecondsForEnd(untimed, "f-1", 3.2)).toBeCloseTo(3.2);
+  });
+  it("stops at the next formation's start", () => {
+    expect(holdSecondsForEnd(untimed, "f-1", 9)).toBe(4);
+  });
+  it("never goes below zero", () => {
+    expect(holdSecondsForEnd(untimed, "f-2", 1)).toBe(0);
+  });
+  it("is unlimited after the last formation", () => {
+    expect(holdSecondsForEnd(untimed, "f-2", 30)).toBe(26);
+  });
+  it("snaps the end to the nearest beat when there is a tempo", () => {
+    expect(holdSecondsForEnd(base, "f-1", 3.2)).toBe(3);
+    expect(holdSecondsForEnd(base, "f-1", 3.3)).toBe(3.5);
+  });
+  it("rejects an unknown formation or a non-finite time", () => {
+    expect(() => holdSecondsForEnd(base, "ghost", 3)).toThrow(EditError);
+    expect(() => holdSecondsForEnd(base, "f-1", Number.NaN)).toThrow(EditError);
   });
 });

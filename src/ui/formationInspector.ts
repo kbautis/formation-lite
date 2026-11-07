@@ -3,8 +3,9 @@
 import type { Controller } from "../app/controller";
 import type { AppState } from "../app/state";
 import { addFormationAt, removeFormation, renameFormation, updateFormationTiming } from "../model/edits";
-import { activeFormationAt } from "../model/interpolate";
+import { activeFormationAt, holdEnd } from "../model/interpolate";
 import { beatsToSeconds } from "../model/tempo";
+import { formatTime } from "../model/time";
 import { FORMATION_NAME_MAX_LENGTH } from "../model/types";
 import { el, syncInputValue } from "./dom";
 
@@ -15,11 +16,13 @@ export function mountFormationInspector(root: HTMLElement, controller: Controlle
   const startInput = el("input", { type: "number", min: 0, step: "0.1", inputmode: "decimal", "aria-label": "Start in seconds" });
   const holdInput = el("input", { type: "number", min: 0, inputmode: "decimal", "aria-label": "Hold length" });
   const holdUnit = el("span");
+  const holdHint = el("p", { class: "hint" });
   const deleteButton = el("button", { type: "button", class: "danger" }, ["Delete formation"]);
   const editor = el("div", { class: "formation-editor" }, [
     nameInput,
     el("label", { class: "field" }, [el("span", {}, ["Starts at (s)"]), startInput]),
     el("label", { class: "field" }, [holdUnit, holdInput]),
+    holdHint,
     deleteButton,
   ]);
   const addHereButton = el("button", { type: "button", class: "primary" }, ["Add formation here"]);
@@ -73,6 +76,11 @@ export function mountFormationInspector(root: HTMLElement, controller: Controlle
     holdInput.step = tempo ? "1" : "0.25";
     const hold = tempo ? (formation.holdSeconds * tempo.bpm) / 60 : formation.holdSeconds;
     syncInputValue(holdInput, String(Math.round(hold * COUNT_PRECISION) / COUNT_PRECISION));
+    const next = state.routine.formations.find((candidate) => candidate.startSeconds > formation.startSeconds);
+    holdHint.textContent =
+      `Holds until ${formatTime(holdEnd(formation))}` +
+      (next ? `; next formation at ${formatTime(next.startSeconds)}.` : ".") +
+      " You can also drag the formation's right edge on the timeline.";
     deleteButton.disabled = state.routine.formations.length === 1;
   };
   controller.store.subscribe((next, previous) => {

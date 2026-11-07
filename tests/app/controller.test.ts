@@ -176,3 +176,35 @@ describe("Controller timeline zoom", () => {
     expect(controller.store.getState().pixelsPerSecond).toBe(zoomed);
   });
 });
+
+describe("Controller hold drag", () => {
+  it("lengthens a hold live and records the whole drag as one undo step", async () => {
+    await saveRoutine(database, { ...validRoutineInput(), tempo: null });
+    const controller = makeController();
+    await controller.start();
+    expect(controller.beginHoldDrag("f-1")).toBe(true);
+    controller.dragHoldTo(2.5);
+    controller.dragHoldTo(3.5);
+    expect(controller.store.getState().routine.formations[0]?.holdSeconds).toBeCloseTo(3.5);
+    controller.endHoldDrag();
+    controller.undo();
+    expect(controller.store.getState().routine.formations[0]?.holdSeconds).toBe(2);
+  });
+
+  it("moves the playhead to the formation so the sidebar shows its hold", async () => {
+    await saveRoutine(database, { ...validRoutineInput(), tempo: null });
+    const controller = makeController();
+    await controller.start();
+    controller.seek(3);
+    controller.beginHoldDrag("f-2");
+    expect(controller.store.getState().playheadSeconds).toBe(4);
+    controller.endHoldDrag();
+  });
+
+  it("is refused in the view-only layout", async () => {
+    await saveRoutine(database, validRoutineInput());
+    const controller = makeController(false);
+    await controller.start();
+    expect(controller.beginHoldDrag("f-1")).toBe(false);
+  });
+});

@@ -148,6 +148,19 @@ export function moveDancer(routine: Routine, options: MoveDancerOptions): Routin
   );
 }
 
+/**
+ * The hold a formation gets when its end is dragged to endSeconds: snapped to the nearest
+ * beat when there is a tempo, never negative, and never running into the next formation.
+ */
+export function holdSecondsForEnd(routine: Routine, formationId: string, endSeconds: number): number {
+  const formation = requireFormation(routine, formationId);
+  if (!Number.isFinite(endSeconds)) throw new EditError("A formation's end must be a time in the song.");
+  const end = routine.tempo ? snapToBeat(routine.tempo, endSeconds) : endSeconds;
+  const next = routine.formations.find((candidate) => candidate.startSeconds > formation.startSeconds);
+  const longestHold = next ? next.startSeconds - formation.startSeconds : Number.POSITIVE_INFINITY;
+  return Math.min(longestHold, Math.max(0, end - formation.startSeconds));
+}
+
 /** The formation a drag at this moment edits; throws when the playhead is mid-transition. */
 export function editableFormationAt(routine: Routine, seconds: number): Formation {
   const formation = activeFormationAt(routine, seconds);
