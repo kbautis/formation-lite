@@ -100,6 +100,8 @@ with Cmd+Shift+R (Ctrl+Shift+R on Windows and Linux).
 
 ## Developing
 
+Run the unit tests, the type checker, and the browser smoke test:
+
 ```bash
 npm test
 ```
