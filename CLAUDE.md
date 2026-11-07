@@ -52,7 +52,7 @@ formation-lite/
 │   │   ├── tempo.ts              # beatAt, countLabelAt, snapToBeat, beatsToSeconds, beatTimesBetween
 │   │   ├── time.ts               # formatTime (m:ss.t)
 │   │   ├── stage.ts              # stageAspect, gridStep, gridLines, toViewCoords (flip), SVG mapping, clampToWings
-│   │   ├── timeline.ts           # timelineDurationSeconds, rulerStepSeconds
+│   │   ├── timeline.ts           # timelineDurationSeconds, rulerStepSeconds, fitPixelsPerSecond, countLabelEvery
 │   │   ├── edits.ts              # immutable edit functions on Routine
 │   │   ├── factory.ts            # createRoutine, createDancer, nextColor
 │   │   └── history.ts            # undo/redo stack of Routine snapshots
@@ -76,7 +76,7 @@ formation-lite/
 │       ├── keyboard.ts           # Space, ←/→, undo/redo shortcuts
 │       ├── notice.ts             # toast notices + "not saving" banner
 │       ├── toolbar.ts            # routine name, routine picker, new/open file/export/delete, save status
-│       ├── transport.ts          # play/pause, time + count readout, add formation, flip, undo/redo, zoom
+│       ├── transport.ts          # play/pause, time + count readout, add formation, flip, undo/redo, zoom −/Fit/+
 │       ├── stagePanel.ts         # open stage vs. real width × depth
 │       ├── sidebarToggle.ts      # Hide/Show panels so the stage gets the full width (per-device preference)
 │       ├── songPanel.ts          # load song, BPM, tap first beat

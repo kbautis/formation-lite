@@ -236,6 +236,8 @@ body.sidebar-hidden .workspace { grid-template-columns: minmax(0, 1fr); }
 .timeline-scroll { overflow-x: auto; overflow-y: hidden; padding: 0 16px 10px; }
 .timeline-content { position: relative; height: 92px; min-width: 100%; cursor: text; touch-action: pan-y; }
 .ruler, .counts, .track { position: absolute; left: 0; right: 0; }
+/* Labels at the very end of the song would spill past the timeline and make it scroll. */
+.ruler, .counts { overflow: hidden; }
 .ruler { top: 0; height: 18px; border-bottom: 1px solid var(--border); }
 .ruler-mark { position: absolute; top: 0; padding-left: 3px; border-left: 1px solid var(--border); font-size: 11px; color: var(--muted); height: 18px; }
 .counts { top: 20px; height: 16px; }

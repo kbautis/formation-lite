@@ -139,3 +139,40 @@ describe("Controller in the view-only layout", () => {
     expect(controller.store.getState().notice?.text).toContain("view-only");
   });
 });
+
+describe("Controller timeline zoom", () => {
+  it("starts in fit-to-window mode", async () => {
+    const controller = makeController();
+    await controller.start();
+    expect(controller.store.getState().timelineFit).toBe(true);
+  });
+
+  it("fits the whole timeline into the given width", async () => {
+    const controller = makeController();
+    await controller.start();
+    controller.applyTimelineFit(1200);
+    const { pixelsPerSecond } = controller.store.getState();
+    expect(controller.timelineDuration() * pixelsPerSecond).toBeCloseTo(1200);
+  });
+
+  it("leaves fit mode when the user zooms, and returns to it on request", async () => {
+    const controller = makeController();
+    await controller.start();
+    controller.applyTimelineFit(1200);
+    const fitted = controller.store.getState().pixelsPerSecond;
+    controller.zoom(2);
+    expect(controller.store.getState().timelineFit).toBe(false);
+    expect(controller.store.getState().pixelsPerSecond).toBeCloseTo(fitted * 2);
+    controller.setTimelineFit(true);
+    expect(controller.store.getState().timelineFit).toBe(true);
+  });
+
+  it("ignores a fit while the user has zoomed manually", async () => {
+    const controller = makeController();
+    await controller.start();
+    controller.zoom(2);
+    const zoomed = controller.store.getState().pixelsPerSecond;
+    controller.applyTimelineFit(300);
+    expect(controller.store.getState().pixelsPerSecond).toBe(zoomed);
+  });
+});

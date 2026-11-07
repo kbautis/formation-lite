@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { MIN_TIMELINE_SECONDS, TIMELINE_TAIL_SECONDS, rulerStepSeconds, timelineDurationSeconds } from "../../src/model/timeline";
+import {
+  MIN_COUNT_LABEL_SPACING_PIXELS,
+  MIN_TIMELINE_SECONDS,
+  TIMELINE_TAIL_SECONDS,
+  countLabelEvery,
+  fitPixelsPerSecond,
+  rulerStepSeconds,
+  timelineDurationSeconds,
+} from "../../src/model/timeline";
 import { validRoutineInput } from "../fixtures/routines";
 
 describe("timelineDurationSeconds", () => {
@@ -31,5 +39,31 @@ describe("rulerStepSeconds", () => {
   });
   it("rejects a non-positive zoom", () => {
     expect(() => rulerStepSeconds(0)).toThrow(RangeError);
+  });
+});
+
+describe("fitPixelsPerSecond", () => {
+  it("scales a whole song into the available width", () => {
+    expect(fitPixelsPerSecond(180, 1200)).toBeCloseTo(1200 / 180);
+    expect(180 * fitPixelsPerSecond(180, 1200)).toBeCloseTo(1200);
+  });
+  it("rejects a non-positive duration or width", () => {
+    expect(() => fitPixelsPerSecond(0, 1200)).toThrow(RangeError);
+    expect(() => fitPixelsPerSecond(180, 0)).toThrow(RangeError);
+  });
+});
+
+describe("countLabelEvery", () => {
+  it(`labels every 8-count when they are at least ${MIN_COUNT_LABEL_SPACING_PIXELS} px apart`, () => {
+    expect(countLabelEvery(MIN_COUNT_LABEL_SPACING_PIXELS)).toBe(1);
+    expect(countLabelEvery(80)).toBe(1);
+  });
+  it("thins labels to every 2nd, 4th, … 8-count when they are crowded", () => {
+    expect(countLabelEvery(15)).toBe(2);
+    expect(countLabelEvery(6)).toBe(4);
+    expect(countLabelEvery(1)).toBe(32);
+  });
+  it("rejects non-positive spacing", () => {
+    expect(() => countLabelEvery(0)).toThrow(RangeError);
   });
 });

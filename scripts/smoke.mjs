@@ -14,8 +14,8 @@ const { chromium } = require("playwright");
 const PORT = 4173;
 const BASE_URL = `http://localhost:${PORT}/`;
 const ARTIFACTS = path.resolve("smoke-artifacts");
-const SONG_SECONDS = 12;
-const PIXELS_PER_SECOND = 20;
+// Long enough that, at the old fixed zoom (20 px/s), the timeline would be wider than the window.
+const SONG_SECONDS = 90;
 
 const failures = [];
 function check(condition, message) {
@@ -96,9 +96,14 @@ async function dragDancer(page, name, dx, dy) {
   await page.mouse.up();
 }
 
+// The timeline is the song's length (no formation runs past it here), so its zoom is width / song length.
 async function seekTimeline(page, seconds) {
   const box = await page.locator(".timeline-content").boundingBox();
-  await page.mouse.click(box.x + seconds * PIXELS_PER_SECOND + 1, box.y + 10);
+  await page.mouse.click(box.x + (seconds * box.width) / SONG_SECONDS + 1, box.y + 10);
+}
+
+function timelineFits(page) {
+  return page.locator(".timeline-scroll").evaluate((node) => node.scrollWidth <= node.clientWidth + 1);
 }
 
 async function main() {
@@ -127,12 +132,16 @@ async function main() {
     await page.waitForSelector(".song-name[data-state='loaded']");
     check((await page.locator(".song-name").textContent()).includes("test-song.wav"), "song loads and shows its name");
 
-    // A long song makes the timeline wider than the screen; it must scroll inside itself, not widen the page.
+    // By default the whole song fits the timeline, whatever its length.
+    check(await timelineFits(page), "the whole song fits in the timeline without scrolling");
+
+    // Zoomed in, the timeline is wider than the screen; it must scroll inside itself, not widen the page.
     for (let step = 0; step < 5; step++) await page.click("[aria-label='Zoom timeline in']");
     const pageWidth = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, viewport: window.innerWidth }));
     const timelineScrolls = await page.locator(".timeline-scroll").evaluate((node) => node.scrollWidth > node.clientWidth);
     check(pageWidth.scroll <= pageWidth.viewport && timelineScrolls, `a timeline wider than the screen scrolls inside itself (page ${pageWidth.scroll}px, window ${pageWidth.viewport}px)`);
-    for (let step = 0; step < 5; step++) await page.click("[aria-label='Zoom timeline out']");
+    await page.click("[aria-label='Fit timeline to window']");
+    check(await timelineFits(page), "Fit returns the whole song to view");
 
     await page.fill("input[aria-label='Beats per minute']", "120");
     await page.press("input[aria-label='Beats per minute']", "Enter");

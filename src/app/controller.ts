@@ -8,7 +8,7 @@ import {
 import { createRoutine } from "../model/factory";
 import { canRedo, canUndo, createHistory, pushHistory, redo, replacePresent, undo, type History } from "../model/history";
 import { clampToWings } from "../model/stage";
-import { timelineDurationSeconds } from "../model/timeline";
+import { fitPixelsPerSecond, timelineDurationSeconds } from "../model/timeline";
 import { touchRoutine } from "../model/edits";
 import type { Position, Routine } from "../model/types";
 import { downloadRoutine, readRoutineFile } from "../io/files";
@@ -76,6 +76,7 @@ export class Controller {
       notice: null,
       canEdit: deps.canEdit,
       pixelsPerSecond: DEFAULT_PIXELS_PER_SECOND,
+      timelineFit: true,
     });
   }
 
@@ -379,9 +380,19 @@ export class Controller {
     this.store.setState({ selectedDancerId: dancerId });
   }
 
+  /** Zooms by hand, which leaves fit-to-window mode. */
   zoom(factor: number): void {
-    const pixelsPerSecond = Math.min(MAX_PIXELS_PER_SECOND, Math.max(MIN_PIXELS_PER_SECOND, this.state.pixelsPerSecond * factor));
-    this.store.setState({ pixelsPerSecond });
+    this.store.setState({ pixelsPerSecond: clampZoom(this.state.pixelsPerSecond * factor), timelineFit: false });
+  }
+
+  setTimelineFit(timelineFit: boolean): void {
+    this.store.setState({ timelineFit });
+  }
+
+  /** In fit mode, zooms so the whole timeline fills widthPixels. Does nothing after a manual zoom. */
+  applyTimelineFit(widthPixels: number): void {
+    if (!this.state.timelineFit) return;
+    this.store.setState({ pixelsPerSecond: clampZoom(fitPixelsPerSecond(this.timelineDuration(), widthPixels)) });
   }
 
   notify(kind: Notice["kind"], text: string): void {
@@ -479,6 +490,10 @@ export class Controller {
     const others = this.state.savedRoutines.filter((candidate) => candidate.id !== saved.id);
     this.store.setState({ saveStatus: "saved", savedRoutines: [saved, ...others] });
   }
+}
+
+function clampZoom(pixelsPerSecond: number): number {
+  return Math.min(MAX_PIXELS_PER_SECOND, Math.max(MIN_PIXELS_PER_SECOND, pixelsPerSecond));
 }
 
 function readLastOpenedId(): string | null {

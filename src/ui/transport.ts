@@ -18,6 +18,7 @@ export function mountTransport(root: HTMLElement, controller: Controller, newId:
   const redoButton = el("button", { type: "button", "data-edit-only": true, "aria-label": "Redo" }, ["Redo"]);
   const zoomOut = el("button", { type: "button", class: "icon-button", "aria-label": "Zoom timeline out" }, ["−"]);
   const zoomIn = el("button", { type: "button", class: "icon-button", "aria-label": "Zoom timeline in" }, ["+"]);
+  const zoomFit = el("button", { type: "button", "aria-label": "Fit timeline to window", title: "Show the whole song" }, ["Fit"]);
 
   root.append(
     playButton,
@@ -27,7 +28,7 @@ export function mountTransport(root: HTMLElement, controller: Controller, newId:
     el("div", { class: "spacer" }),
     undoButton,
     redoButton,
-    el("div", { class: "zoom" }, [zoomOut, zoomIn]),
+    el("div", { class: "zoom" }, [zoomOut, zoomFit, zoomIn]),
   );
 
   playButton.addEventListener("click", () => controller.togglePlay());
@@ -40,6 +41,7 @@ export function mountTransport(root: HTMLElement, controller: Controller, newId:
   redoButton.addEventListener("click", () => controller.redo());
   zoomOut.addEventListener("click", () => controller.zoom(1 / ZOOM_STEP));
   zoomIn.addEventListener("click", () => controller.zoom(ZOOM_STEP));
+  zoomFit.addEventListener("click", () => controller.setTimelineFit(true));
 
   const render = (state: AppState) => {
     playButton.textContent = state.isPlaying ? "Pause" : "Play";
@@ -51,6 +53,7 @@ export function mountTransport(root: HTMLElement, controller: Controller, newId:
     flipButton.title = "Flip between the audience's view and the dancers' view";
     undoButton.disabled = !controller.canUndo();
     redoButton.disabled = !controller.canRedo();
+    zoomFit.setAttribute("aria-pressed", String(state.timelineFit));
   };
   controller.store.subscribe(render);
   render(controller.store.getState());

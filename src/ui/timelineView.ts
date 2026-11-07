@@ -1,12 +1,14 @@
 // The timeline: time ruler, optional 8-count row, formation blocks, playhead.
 // Pointer down anywhere scrubs; pointer down on a formation block jumps to its start.
 // The content rebuilds when the routine or zoom changes; the playhead moves every frame.
+// In fit mode (the default) it measures its own width and asks the controller to zoom so
+// the whole timeline fits: on mount, on resize, and when the timeline's length changes.
 import type { Controller } from "../app/controller";
 import type { AppState } from "../app/state";
 import { activeFormationAt, holdEnd } from "../model/interpolate";
 import { beatTimesBetween, beatsToSeconds } from "../model/tempo";
 import { formatTime } from "../model/time";
-import { rulerStepSeconds, timelineDurationSeconds } from "../model/timeline";
+import { countLabelEvery, rulerStepSeconds, timelineDurationSeconds } from "../model/timeline";
 import { el } from "./dom";
 
 const MIN_BEAT_TICK_SPACING_PIXELS = 6;
@@ -21,6 +23,17 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
   const content = el("div", { class: "timeline-content" }, [ruler, counts, track, playhead]);
   const scroller = el("div", { class: "timeline-scroll", "aria-label": "Timeline. Drag to scrub." }, [content]);
   root.append(scroller);
+
+  const availableWidth = () => {
+    const style = getComputedStyle(scroller);
+    // One pixel of slack so rounding never produces a scrollbar for a fitted timeline.
+    return scroller.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight) - 1;
+  };
+  const refit = () => {
+    const width = availableWidth();
+    if (width > 0) controller.applyTimelineFit(width);
+  };
+  new ResizeObserver(refit).observe(scroller);
 
   let scrubbingPointer: number | null = null;
   const secondsAt = (event: PointerEvent) => {
@@ -61,7 +74,9 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
 
     counts.hidden = routine.tempo === null;
     if (routine.tempo) {
-      const showBeats = beatsToSeconds(routine.tempo, 1) * pixelsPerSecond >= MIN_BEAT_TICK_SPACING_PIXELS;
+      const beatPixels = beatsToSeconds(routine.tempo, 1) * pixelsPerSecond;
+      const showBeats = beatPixels >= MIN_BEAT_TICK_SPACING_PIXELS;
+      const labelEvery = countLabelEvery(beatPixels * 8);
       let eight = 0;
       const marks: HTMLElement[] = [];
       for (const beat of beatTimesBetween(routine.tempo, 0, duration)) {
@@ -69,7 +84,7 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
         if (!beat.isDownbeat && !showBeats) continue;
         marks.push(
           el("span", { class: beat.isDownbeat ? "count-mark downbeat" : "count-mark", style: `left:${beat.seconds * pixelsPerSecond}px` }, [
-            beat.isDownbeat ? String(eight) : "",
+            beat.isDownbeat && (eight - 1) % labelEvery === 0 ? String(eight) : "",
           ]),
         );
       }
@@ -111,6 +126,11 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
   };
 
   controller.store.subscribe((next, previous) => {
+    const lengthChanged = timelineDurationSeconds(next.routine) !== timelineDurationSeconds(previous.routine);
+    if (next.timelineFit && (lengthChanged || !previous.timelineFit)) {
+      refit();
+      next = controller.store.getState();
+    }
     if (next.routine !== previous.routine || next.pixelsPerSecond !== previous.pixelsPerSecond) renderContent(next);
     if (next.playheadSeconds !== previous.playheadSeconds || next.routine !== previous.routine || next.pixelsPerSecond !== previous.pixelsPerSecond) {
       renderPlayhead(next);
