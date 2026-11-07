@@ -127,6 +127,13 @@ async function main() {
     await page.waitForSelector(".song-name[data-state='loaded']");
     check((await page.locator(".song-name").textContent()).includes("test-song.wav"), "song loads and shows its name");
 
+    // A long song makes the timeline wider than the screen; it must scroll inside itself, not widen the page.
+    for (let step = 0; step < 5; step++) await page.click("[aria-label='Zoom timeline in']");
+    const pageWidth = await page.evaluate(() => ({ scroll: document.documentElement.scrollWidth, viewport: window.innerWidth }));
+    const timelineScrolls = await page.locator(".timeline-scroll").evaluate((node) => node.scrollWidth > node.clientWidth);
+    check(pageWidth.scroll <= pageWidth.viewport && timelineScrolls, `a timeline wider than the screen scrolls inside itself (page ${pageWidth.scroll}px, window ${pageWidth.viewport}px)`);
+    for (let step = 0; step < 5; step++) await page.click("[aria-label='Zoom timeline out']");
+
     await page.fill("input[aria-label='Beats per minute']", "120");
     await page.press("input[aria-label='Beats per minute']", "Enter");
     await page.locator("input[aria-label='Beats per minute']").blur();
