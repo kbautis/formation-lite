@@ -51,7 +51,7 @@ components read from it and dispatch edits. Edits go through the model's edit fu
 and the undo history, and every change to `routine` triggers a debounced autosave.
 
 **Storage** (`src/storage/`) is the only code that touches IndexedDB. It exposes
-`saveRoutine`, `loadRoutine`, `listRoutines`, `deleteRoutine`, `saveSong`, `loadSong`
+`saveRoutine`, `loadRoutine`, `listRoutines`, `deleteRoutineWithSong`, `saveSong`, `loadSong`
 and `deleteSong`. Swapping the store underneath later changes this folder only.
 
 **Playback** (`src/playback/`) provides one `PlaybackClock` interface with two

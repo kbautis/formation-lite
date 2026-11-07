@@ -57,8 +57,8 @@ formation-lite/
 │   │   ├── serialize.ts          # serializeRoutine (pure), routineFileName
 │   │   └── files.ts              # downloadRoutine, readRoutineFile (browser glue)
 │   ├── storage/
-│   │   ├── database.ts           # openDatabase(): the only indexedDB.open call
-│   │   ├── routines.ts           # saveRoutine, loadRoutine, listRoutines, deleteRoutine
+│   │   ├── database.ts           # openDatabase(factory), runRequest, StorageError
+│   │   ├── routines.ts           # saveRoutine, loadRoutine, listRoutines, deleteRoutineWithSong
 │   │   └── songs.ts              # saveSong, loadSong, deleteSong
 │   ├── playback/
 │   │   ├── clock.ts              # PlaybackClock interface + SilentClock
@@ -198,9 +198,9 @@ function that throws when it is missing.
 - [x] Verify: tests for each edit, each precondition, and undo/redo round-trips
 
 ### Task 5 — Storage
-- [ ] `storage/database.ts`, `storage/routines.ts`, `storage/songs.ts` per architecture §4.4
-- [ ] `loadRoutine` and `listRoutines` validate every record; a corrupt record is reported, not returned
-- [ ] Verify: tests run against `fake-indexeddb` (save → load round-trip, list, delete, corrupt record)
+- [x] `storage/database.ts`, `storage/routines.ts`, `storage/songs.ts` per architecture §4.4
+- [x] `loadRoutine` and `listRoutines` validate every record; a corrupt record is reported, not returned
+- [x] Verify: tests run against `fake-indexeddb` (save → load round-trip, list, delete, corrupt record)
 
 ### Task 6 — Playback clock and serialization
 - [ ] `playback/clock.ts`: `PlaybackClock` interface and `SilentClock(now: () => number)`
