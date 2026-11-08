@@ -45,6 +45,8 @@ export interface AppState {
   readonly pixelsPerSecond: number;
   /** True while the timeline is zoomed to fit the window; zooming by hand turns it off. */
   readonly timelineFit: boolean;
+  /** Draw each dancer's path from the previous formation while editing. */
+  readonly showPaths: boolean;
 }
 
 export const DEFAULT_PIXELS_PER_SECOND = 20;

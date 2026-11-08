@@ -222,9 +222,10 @@ history entry is pushed, on pointer-up.
 
 **Timeline editing.** The timeline zooms to fit its width by default, so a whole song is
 visible; zooming by hand leaves fit mode and *Fit* returns to it. Dragging a formation's
-right edge calls `beginHoldDrag` / `dragHoldTo` / `endHoldDrag`. Each move computes the
-hold with `holdSecondsForEnd` (snapped to the beat with a tempo, clamped between 0 and the
-next formation's start) and updates the routine live; pointer-up records one undo step,
+edge calls `beginEdgeDrag(id, "start" | "end")` / `dragEdgeTo` / `endEdgeDrag`. Each move
+computes the new timing with `holdSecondsForEnd` or `startSecondsForDrag` (snapped to the
+beat with a tempo, leaving a minimum transition, §4.3.1) and updates the routine live;
+pointer-up records one undo step,
 the same pattern as dragging a dancer. The zoom is frozen during the drag so a timeline
 that grows with the last hold does not rezoom under the pointer.
 

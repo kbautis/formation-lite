@@ -177,34 +177,66 @@ describe("Controller timeline zoom", () => {
   });
 });
 
-describe("Controller hold drag", () => {
-  it("lengthens a hold live and records the whole drag as one undo step", async () => {
+describe("Controller edge drag", () => {
+  it("lengthens a hold live from the right edge and records the whole drag as one undo step", async () => {
     await saveRoutine(database, { ...validRoutineInput(), tempo: null });
     const controller = makeController();
     await controller.start();
-    expect(controller.beginHoldDrag("f-1")).toBe(true);
-    controller.dragHoldTo(2.5);
-    controller.dragHoldTo(3.5);
-    expect(controller.store.getState().routine.formations[0]?.holdSeconds).toBeCloseTo(3.5);
-    controller.endHoldDrag();
+    expect(controller.beginEdgeDrag("f-1", "end")).toBe(true);
+    controller.dragEdgeTo(2.5);
+    controller.dragEdgeTo(3.2);
+    expect(controller.store.getState().routine.formations[0]?.holdSeconds).toBeCloseTo(3.2);
+    controller.endEdgeDrag();
     controller.undo();
     expect(controller.store.getState().routine.formations[0]?.holdSeconds).toBe(2);
   });
 
-  it("moves the playhead to the formation so the sidebar shows its hold", async () => {
+  it("moves the start from the left edge and keeps the end", async () => {
+    await saveRoutine(database, { ...validRoutineInput(), tempo: null });
+    const controller = makeController();
+    await controller.start();
+    controller.beginEdgeDrag("f-2", "start");
+    controller.dragEdgeTo(5);
+    controller.endEdgeDrag();
+    const formation = controller.store.getState().routine.formations[1]!;
+    expect(formation.startSeconds).toBe(5);
+    expect(formation.startSeconds + formation.holdSeconds).toBe(6);
+  });
+
+  it("moves the playhead into the formation so the sidebar shows it", async () => {
     await saveRoutine(database, { ...validRoutineInput(), tempo: null });
     const controller = makeController();
     await controller.start();
     controller.seek(3);
-    controller.beginHoldDrag("f-2");
+    controller.beginEdgeDrag("f-2", "end");
     expect(controller.store.getState().playheadSeconds).toBe(4);
-    controller.endHoldDrag();
+    controller.endEdgeDrag();
+  });
+
+  it("keeps the playhead inside the formation while its start is dragged later", async () => {
+    await saveRoutine(database, { ...validRoutineInput(), tempo: null });
+    const controller = makeController();
+    await controller.start();
+    controller.beginEdgeDrag("f-2", "start");
+    controller.dragEdgeTo(5.5);
+    expect(controller.store.getState().playheadSeconds).toBe(5.5);
+    controller.endEdgeDrag();
   });
 
   it("is refused in the view-only layout", async () => {
     await saveRoutine(database, validRoutineInput());
     const controller = makeController(false);
     await controller.start();
-    expect(controller.beginHoldDrag("f-1")).toBe(false);
+    expect(controller.beginEdgeDrag("f-1", "end")).toBe(false);
+  });
+});
+
+describe("Controller paths", () => {
+  it("shows paths by default and toggles them", async () => {
+    const controller = makeController();
+    await controller.start();
+    expect(controller.store.getState().showPaths).toBe(true);
+    controller.togglePaths();
+    expect(controller.store.getState().showPaths).toBe(false);
   });
 });

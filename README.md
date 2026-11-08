@@ -22,8 +22,23 @@ are no accounts and nothing to pay for, and your routines stay on your device.
    spots.
 
 Click a formation on the timeline to jump to it and edit its name, start time, or hold
-length. Drag a formation's right edge on the timeline to make it hold longer or shorter;
-it snaps to the beat when a BPM is set and stops at the next formation. The timeline fits the whole song in the window; **−/+** zoom in for detail and **Fit**
+length. On the timeline, drag a formation's **left edge** to change when it starts or its
+**right edge** to change how long it holds. Drags snap to the beat when a BPM is set and
+always leave at least 1 count (0.5 s) for dancers to move.
+
+### Transitions
+
+The dashed segment between two formations is the transition, labeled with its length.
+With a formation selected, the sidebar's **Transition in** section sets:
+
+- **Takes:** how long dancers have to arrive. Changing it moves when the previous
+  formation releases; this formation stays on its beat.
+- **Ripple:** dancers set off one after another (left to right, front to back, in list
+  order, and so on), with a **Spread** for how staggered they are.
+
+While you're on a formation, each dancer's path from the previous formation is drawn on
+the stage (toggle with **Paths**). If two dancers pass closer than 2 ft (0.6 m) mid-move,
+their paths and the transition turn red and the sidebar says who and when. The timeline fits the whole song in the window; **−/+** zoom in for detail and **Fit**
 shows the whole song again. **Hide panels** (bottom right) gives the stage the full width; this device
 remembers the choice. ←/→ step one count (or one second without a BPM). Ctrl/⌘+Z undoes.
 

@@ -261,20 +261,21 @@ body.sidebar-hidden .workspace { grid-template-columns: minmax(0, 1fr); }
   text-overflow: ellipsis;
 }
 .formation-block:hover:not(:disabled) { background: var(--block); filter: brightness(0.97); }
-.formation-block.active { background: var(--block-active); color: var(--accent-text); }
+.formation-block.active, .formation-block.active:hover:not(:disabled) { background: var(--block-active); color: var(--accent-text); }
 .formation-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-/* Right-edge grip for dragging the hold; it overhangs the block so short holds stay grabbable. */
-.hold-handle {
+/* Edge grips: left sets the start, right sets the hold. They overhang the block so short holds stay grabbable. */
+.edge-handle {
   position: absolute;
   top: 0;
   bottom: 0;
-  right: -6px;
   width: 12px;
   z-index: 1;
   cursor: ew-resize;
   touch-action: none;
 }
-.hold-handle::after {
+.edge-handle.start { left: -6px; }
+.edge-handle.end { right: -6px; }
+.edge-handle::after {
   content: "";
   position: absolute;
   top: 10px;
@@ -285,8 +286,39 @@ body.sidebar-hidden .workspace { grid-template-columns: minmax(0, 1fr); }
   background: var(--block-active);
   opacity: 0.55;
 }
-.formation-block.active .hold-handle::after { background: var(--accent-text); }
-.hold-handle:hover::after { opacity: 1; }
+.formation-block.active .edge-handle::after { background: var(--accent-text); }
+.edge-handle:hover::after { opacity: 1; }
+
+/* The gap before a formation is its transition: a thin labeled bar between blocks. */
+.transition-segment {
+  position: absolute;
+  top: 16px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-top: 2px dashed var(--grid-center);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.transition-segment.has-collision { border-top-color: var(--danger); color: var(--danger); font-weight: 600; }
+
+/* Paths from the previous formation, drawn under the dancers while editing. */
+.paths .path { stroke-width: 0.5; stroke-dasharray: 1.4 1; opacity: 0.7; fill: none; }
+.paths .path.collides { stroke: var(--danger) !important; stroke-width: 0.8; opacity: 1; }
+.paths .ghost { fill: none; stroke-width: 0.4; opacity: 0.6; }
+
+.transition-editor { display: grid; gap: 8px; padding-top: 4px; border-top: 1px dashed var(--border); }
+.transition-editor h3 { margin: 4px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.transition-fields { display: grid; gap: 8px; }
+.transition-fields input[type="range"] { width: 100%; }
+.encounters { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.encounter { display: flex; align-items: center; gap: 8px; color: var(--danger); font-size: 12px; }
+.encounter span { flex: 1; }
 .playhead {
   position: absolute;
   top: 0;

@@ -44,6 +44,30 @@ function makeWav(seconds) {
   return buffer;
 }
 
+/** A routine where two dancers swap sides through the same point. */
+function crossingRoutine() {
+  const formation = (id, name, startSeconds, positions) => ({ id, name, startSeconds, holdSeconds: 2, stagger: null, positions });
+  return {
+    format: "formation-lite/routine",
+    version: 2,
+    id: "crossing-routine",
+    name: "Crossing",
+    createdAt: "2026-11-08T00:00:00.000Z",
+    updatedAt: "2026-11-08T00:00:00.000Z",
+    stage: { size: { width: 40, depth: 30, unit: "ft" } },
+    song: null,
+    tempo: null,
+    dancers: [
+      { id: "a", name: "Ana Reyes", color: "#e6194b" },
+      { id: "b", name: "Ben Ito", color: "#3cb44b" },
+    ],
+    formations: [
+      formation("f1", "Sides", 0, { a: { x: 0.2, y: 0.5 }, b: { x: 0.8, y: 0.5 } }),
+      formation("f2", "Swapped", 6, { a: { x: 0.8, y: 0.5 }, b: { x: 0.2, y: 0.5 } }),
+    ],
+  };
+}
+
 async function startServer() {
   // Run Vite's own entry with this Node binary so kill() reaches the server itself, not a wrapper.
   const viteEntry = path.resolve("node_modules/vite/bin/vite.js");
@@ -97,6 +121,16 @@ async function dragDancer(page, name, dx, dy) {
 }
 
 // The timeline is the song's length (no formation runs past it here), so its zoom is width / song length.
+async function dragBy(page, locator, dx) {
+  const box = await locator.boundingBox();
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + dx / 2, y, { steps: 4 });
+  await page.mouse.move(box.x + box.width / 2 + dx, y, { steps: 4 });
+  await page.mouse.up();
+}
+
 async function seekTimeline(page, seconds) {
   const box = await page.locator(".timeline-content").boundingBox();
   await page.mouse.click(box.x + (seconds * box.width) / SONG_SECONDS + 1, box.y + 10);
@@ -169,7 +203,7 @@ async function main() {
     // Dragging a formation's right edge lengthens its hold; the sidebar shows it live; undo restores it.
     const holdInput = page.locator("input[aria-label='Hold length']");
     const holdBefore = Number(await holdInput.inputValue());
-    const handleBox = await page.locator(".formation-block").nth(1).locator("[data-hold-handle]").boundingBox();
+    const handleBox = await page.locator(".formation-block").nth(1).locator("[data-edge='end']").boundingBox();
     await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
     await page.mouse.down();
     await page.mouse.move(handleBox.x + 40, handleBox.y + handleBox.height / 2, { steps: 4 });
@@ -181,6 +215,33 @@ async function main() {
     check((await page.locator(".formation-editor .hint").textContent()).includes("Holds until"), "the sidebar says when the hold ends");
     await page.click("text=Undo");
     check(Number(await holdInput.inputValue()) === holdBefore, "undo restores the hold in one step");
+
+    // Dragging the left edge moves the start and keeps the end.
+    const startInput = page.locator("input[aria-label='Start in seconds']");
+    const startBefore = Number(await startInput.inputValue());
+    const endBefore = await page.locator(".formation-editor .hint").textContent();
+    await dragBy(page, page.locator(".formation-block").nth(1).locator("[data-edge='start']"), 25);
+    check(Number(await startInput.inputValue()) > startBefore, "dragging a formation's left edge moves its start later");
+    check((await page.locator(".formation-editor .hint").textContent()) === endBefore, "dragging the left edge keeps the formation's end");
+    await page.click("text=Undo");
+
+    // Transitions are visible, and an edge drag always leaves at least 1 count to move in.
+    check((await page.locator(".transition-segment").count()) === 1, "the transition between formations shows on the timeline");
+    await dragBy(page, page.locator(".formation-block").nth(0).locator("[data-edge='end']"), 400);
+    check((await page.locator(".transition-segment").first().getAttribute("data-label")) === "1 count", "dragging a hold into the next formation stops 1 count short");
+    await page.click("text=Undo");
+
+    // Paths from the previous formation show while on a formation, and can be hidden.
+    await page.locator(".formation-block").nth(1).click();
+    check((await page.locator(".paths .path").count()) === 3, "each dancer's path from the previous formation is drawn");
+    await page.click("[aria-label='Show paths']");
+    check((await page.locator(".paths .path").count()) === 0, "paths can be hidden");
+    await page.click("[aria-label='Show paths']");
+
+    // Ripple: dancers move one after another; the choice is saved with the routine.
+    check(await page.locator("input[aria-label='Transition in']").isVisible(), "the sidebar shows Transition in for a formation after the first");
+    await page.selectOption("select[aria-label='Ripple order']", "left-to-right");
+    check(await page.locator("input[aria-label='Ripple spread']").isVisible(), "choosing a ripple shows its spread");
 
     await seekTimeline(page, 3.5);
     const midTransition = await dancerTransform(page, "Ben Ito");
@@ -231,6 +292,8 @@ async function main() {
     check((await page.locator(".dancer").count()) === 3, "dancers survive a reload");
     check((await page.locator(".formation-block").count()) === 2, "formations survive a reload");
     check((await page.locator(".song-name").textContent()).includes("test-song.wav"), "song survives a reload");
+    await page.locator(".formation-block").nth(1).click();
+    check((await page.inputValue("select[aria-label='Ripple order']")) === "left-to-right", "the ripple survives a reload");
 
     // ── Export ──────────────────────────────────────────────────────────────
     const [download] = await Promise.all([page.waitForEvent("download"), page.click("text=Export")]);
@@ -270,6 +333,17 @@ async function main() {
     check((await teammatePage.locator(".dancer").count()) === 3, "import on a fresh profile reproduces the dancers");
     check((await teammatePage.locator(".formation-block").count()) === 2, "import on a fresh profile reproduces the formations");
     check((await teammatePage.locator(".song-name[data-state='missing']").count()) === 1, "import asks for the song by name");
+
+    // Two dancers who swap places through each other are flagged.
+    const crossingPath = path.join(ARTIFACTS, "crossing.formation.json");
+    await writeFile(crossingPath, JSON.stringify(crossingRoutine()));
+    await teammatePage.setInputFiles(".app-header input[type='file']", crossingPath);
+    await teammatePage.waitForFunction(() => document.querySelector(".routine-name")?.value === "Crossing");
+    await teammatePage.locator(".formation-block").nth(1).click();
+    check((await teammatePage.locator(".transition-segment.has-collision").count()) === 1, "a crossing transition is flagged on the timeline");
+    check((await teammatePage.locator(".path.collides").count()) === 2, "both crossing paths are drawn as collisions");
+    check((await teammatePage.locator(".encounter").first().textContent()).includes("Ana Reyes and Ben Ito"), "the sidebar names who passes too close");
+    await teammatePage.screenshot({ path: path.join(ARTIFACTS, "crossing.png") });
     await teammate.close();
 
     // ── Phone: view-only ────────────────────────────────────────────────────

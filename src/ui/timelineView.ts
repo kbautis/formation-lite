@@ -3,19 +3,26 @@
 // The content rebuilds when the routine or zoom changes; the playhead moves every frame.
 // In fit mode (the default) it measures its own width and asks the controller to zoom so
 // the whole timeline fits: on mount, on resize, and when the timeline's length changes.
-// Dragging a block's right-edge handle changes its hold. The zoom is frozen during that
-// drag (refit afterwards), or a growing timeline would rezoom under the pointer.
+// Dragging a block's right edge changes its hold; its left edge changes its start. The
+// zoom is frozen during an edge drag (refit afterwards), or a growing timeline would
+// rezoom under the pointer. The gap before each formation is drawn as a labeled
+// transition segment, red when dancers pass too close in it.
 import type { Controller } from "../app/controller";
 import type { AppState } from "../app/state";
+import type { FormationEdge } from "../app/controller";
+import { encountersByFormation } from "../model/collisions";
 import { activeFormationAt, holdEnd } from "../model/interpolate";
 import { beatTimesBetween, beatsToSeconds } from "../model/tempo";
 import { formatTime } from "../model/time";
 import { countLabelEvery, rulerStepSeconds, timelineDurationSeconds } from "../model/timeline";
 import { el } from "./dom";
+import { formatDuration } from "./format";
 
 const MIN_BEAT_TICK_SPACING_PIXELS = 6;
 const MIN_BLOCK_WIDTH_PIXELS = 4;
 const AUTOSCROLL_MARGIN_PIXELS = 40;
+const MIN_TRANSITION_WIDTH_PIXELS = 2;
+const MIN_TRANSITION_LABEL_PIXELS = 44;
 
 export function mountTimelineView(root: HTMLElement, controller: Controller): void {
   const ruler = el("div", { class: "ruler" });
@@ -38,17 +45,17 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
   new ResizeObserver(refit).observe(scroller);
 
   let scrubbingPointer: number | null = null;
-  let holdDragPointer: number | null = null;
+  let edgeDragPointer: number | null = null;
   const secondsAt = (event: PointerEvent) => {
     const bounds = content.getBoundingClientRect();
     return (event.clientX - bounds.left) / controller.store.getState().pixelsPerSecond;
   };
   content.addEventListener("pointerdown", (event) => {
-    const handle = (event.target as Element).closest<HTMLElement>("[data-hold-handle]");
+    const handle = (event.target as Element).closest<HTMLElement>("[data-edge]");
     if (handle) {
       event.preventDefault();
-      if (controller.beginHoldDrag(handle.dataset.holdHandle!)) {
-        holdDragPointer = event.pointerId;
+      if (controller.beginEdgeDrag(handle.dataset.formationId!, handle.dataset.edge as FormationEdge)) {
+        edgeDragPointer = event.pointerId;
         content.setPointerCapture(event.pointerId);
       }
       return;
@@ -65,13 +72,13 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
   });
   content.addEventListener("pointermove", (event) => {
     if (event.pointerId === scrubbingPointer) controller.seek(secondsAt(event));
-    if (event.pointerId === holdDragPointer) controller.dragHoldTo(secondsAt(event));
+    if (event.pointerId === edgeDragPointer) controller.dragEdgeTo(secondsAt(event));
   });
   const stopScrub = (event: PointerEvent) => {
     if (event.pointerId === scrubbingPointer) scrubbingPointer = null;
-    if (event.pointerId === holdDragPointer) {
-      holdDragPointer = null;
-      controller.endHoldDrag();
+    if (event.pointerId === edgeDragPointer) {
+      edgeDragPointer = null;
+      controller.endEdgeDrag();
       refit();
     }
   };
@@ -110,12 +117,32 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
     }
 
     const active = activeFormationAt(routine, state.playheadSeconds);
-    track.replaceChildren(
-      ...routine.formations.map((formation, index) => {
+    const encounters = encountersByFormation(routine);
+    const transitions = routine.formations.slice(1).map((formation, index) => {
+      const previous = routine.formations[index]!;
+      const gap = formation.startSeconds - holdEnd(previous);
+      const label = formatDuration(gap, routine.tempo);
+      const width = Math.max(MIN_TRANSITION_WIDTH_PIXELS, gap * pixelsPerSecond);
+      const crowded = encounters.has(formation.id);
+      return el(
+        "div",
+        {
+          class: crowded ? "transition-segment has-collision" : "transition-segment",
+          style: `left:${holdEnd(previous) * pixelsPerSecond}px;width:${width}px`,
+          title: `Transition into ${formation.name || `Formation ${index + 2}`}: ${label}${crowded ? " — dancers pass too close" : ""}`,
+          "data-label": label,
+        },
+        width >= MIN_TRANSITION_LABEL_PIXELS ? [label] : [],
+      );
+    });
+    const blocks = routine.formations.map((formation, index) => {
         const width = Math.max(MIN_BLOCK_WIDTH_PIXELS, formation.holdSeconds * pixelsPerSecond);
         const label = formation.name || `Formation ${index + 1}`;
         const handle = state.canEdit
-          ? [el("span", { class: "hold-handle", "data-hold-handle": formation.id, title: "Drag to change how long this formation holds" })]
+          ? [
+              el("span", { class: "edge-handle start", "data-edge": "start", "data-formation-id": formation.id, title: "Drag to change when this formation starts" }),
+              el("span", { class: "edge-handle end", "data-edge": "end", "data-formation-id": formation.id, title: "Drag to change how long this formation holds" }),
+            ]
           : [];
         return el(
           "button",
@@ -128,8 +155,8 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
           },
           [el("span", { class: "formation-label" }, [label]), ...handle],
         );
-      }),
-    );
+      });
+    track.replaceChildren(...transitions, ...blocks);
   };
 
   const renderPlayhead = (state: AppState) => {
@@ -141,14 +168,14 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
       if (left < visibleStart || left > visibleEnd - AUTOSCROLL_MARGIN_PIXELS) scroller.scrollLeft = left - AUTOSCROLL_MARGIN_PIXELS;
     }
     const active = activeFormationAt(state.routine, state.playheadSeconds);
-    for (const block of track.children) {
-      block.classList.toggle("active", active !== null && Number((block as HTMLElement).dataset.formationStart) === active.startSeconds);
+    for (const block of track.querySelectorAll<HTMLElement>(".formation-block")) {
+      block.classList.toggle("active", active !== null && Number(block.dataset.formationStart) === active.startSeconds);
     }
   };
 
   controller.store.subscribe((next, previous) => {
     const lengthChanged = timelineDurationSeconds(next.routine) !== timelineDurationSeconds(previous.routine);
-    if (next.timelineFit && holdDragPointer === null && (lengthChanged || !previous.timelineFit)) {
+    if (next.timelineFit && edgeDragPointer === null && (lengthChanged || !previous.timelineFit)) {
       refit();
       next = controller.store.getState();
     }

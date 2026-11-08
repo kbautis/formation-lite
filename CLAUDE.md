@@ -53,7 +53,8 @@ formation-lite/
 │   │   ├── time.ts               # formatTime (m:ss.t)
 │   │   ├── stage.ts              # stageAspect, gridStep, gridLines, toViewCoords (flip), SVG mapping, clampToWings
 │   │   ├── timeline.ts           # timelineDurationSeconds, rulerStepSeconds, fitPixelsPerSecond, countLabelEvery
-│   │   ├── edits.ts              # immutable edit functions on Routine
+│   │   ├── edits.ts              # immutable edit functions on Routine (incl. edge drags, Transition in, ripple)
+│   │   ├── collisions.ts         # closeEncounters, encountersByFormation (dancers passing too close)
 │   │   ├── factory.ts            # createRoutine, createDancer, nextColor
 │   │   └── history.ts            # undo/redo stack of Routine snapshots
 │   ├── io/
@@ -76,14 +77,15 @@ formation-lite/
 │       ├── keyboard.ts           # Space, ←/→, undo/redo shortcuts
 │       ├── notice.ts             # toast notices + "not saving" banner
 │       ├── toolbar.ts            # routine name, routine picker, new/open file/export/delete, save status
-│       ├── transport.ts          # play/pause, time + count readout, add formation, flip, undo/redo, zoom −/Fit/+
+│       ├── transport.ts          # play/pause, readout, add formation, flip, Paths, undo/redo, zoom −/Fit/+
 │       ├── stagePanel.ts         # open stage vs. real width × depth
 │       ├── sidebarToggle.ts      # Hide/Show panels so the stage gets the full width (per-device preference)
 │       ├── songPanel.ts          # load song, BPM, tap first beat
 │       ├── dancerPanel.ts        # add/rename/recolor/remove dancers
-│       ├── stageView.ts          # SVG stage, grid, dancers, drag, view flip
-│       ├── timelineView.ts       # fit-to-window zoom, time/count ruler, formation blocks + hold handles, playhead, seek
-│       └── formationInspector.ts # selected formation: name, start, hold, delete
+│       ├── stageView.ts          # SVG stage, grid, paths from the previous formation, dancers, drag, view flip
+│       ├── timelineView.ts       # fit-to-window zoom, ruler, formation blocks + edge handles, transition segments, playhead
+│       ├── formationInspector.ts # selected formation: name, start, hold, delete
+│       └── transitionPanel.ts    # Transition in: length, ripple order/spread, close encounters
 └── tests/                        # Vitest unit tests mirroring src/
 ```
 
@@ -98,7 +100,7 @@ storage or a file goes through `parseRoutine` before use.
 
 ```
 database "formation-lite" (version 1)
-├── "routines"  keyPath "id"     → Routine document (format "formation-lite/routine", version 1)
+├── "routines"  keyPath "id"     → Routine document (format "formation-lite/routine", version 2; v1 migrates on read)
 └── "songs"     key routine id   → { fileName, mimeType, durationSeconds, bytes: ArrayBuffer }
 ```
 
@@ -233,6 +235,15 @@ function that throws when it is missing.
 - [x] README: what it is, how to use it, "export is your backup"
 - [ ] Verify: the workflow is green and the Pages URL loads the app (needs Pages enabled in repo settings)
 
+### Task 10 — Transitions (revision 2026-11-08, see docs/requirements.md)
+- [x] Format v2: `Formation.stagger`, v1 → v2 migration in `parseRoutine`
+- [x] Ripple timing in `positionsAt` (`staggerRanks`, per-dancer slices)
+- [x] Minimum transition on edge drags and new formations; left-edge `startSecondsForDrag`
+- [x] `transitionInSeconds`, `setTransitionIn` (moves the previous release), `setStagger`
+- [x] `model/collisions.ts`: `closeEncounters`, `encountersByFormation`
+- [x] UI: both edge handles, labeled transition segments, paths + Paths toggle, Transition in panel
+- [x] Verify: unit tests for each function; smoke covers left/right edge drags, minimum gap, paths, ripple persistence, and a crossing routine being flagged
+
 ## Definition of done
 
 - [ ] Every acceptance criterion in `docs/requirements.md` is met
@@ -247,7 +258,8 @@ function that throws when it is missing.
 
 - Teammate highlight: "just me" emphasizes one dancer and draws their path (confirmed by the product owner)
 - Waveform drawn under the timeline
-- Drag formation blocks on the timeline to move their start (dragging the right edge to change the hold is done)
+- Drag a whole formation block to move it (both edges are draggable already)
+- Curved or custom paths; per-dancer timing offsets
 - Tap tempo to detect BPM
 - Copy/paste a formation; mirror a formation left-right
 - Several dancers selected and moved together

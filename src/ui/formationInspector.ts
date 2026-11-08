@@ -80,7 +80,7 @@ export function mountFormationInspector(root: HTMLElement, controller: Controlle
     holdHint.textContent =
       `Holds until ${formatTime(holdEnd(formation))}` +
       (next ? `; next formation at ${formatTime(next.startSeconds)}.` : ".") +
-      " You can also drag the formation's right edge on the timeline.";
+      " On the timeline, drag its left edge to change the start or its right edge to change the hold.";
     deleteButton.disabled = state.routine.formations.length === 1;
   };
   controller.store.subscribe((next, previous) => {

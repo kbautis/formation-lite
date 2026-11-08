@@ -1,8 +1,11 @@
 // The stage: grid in the routine's units, dancers at positionsAt(playhead), drag to edit.
 // Every position passes through toViewCoords on the way in and out, so the dancer's view
 // is purely a rendering choice. The grid only rebuilds when the stage size or view changes.
+// While editing a formation (paused, on its hold), each dancer's path from the previous
+// formation is drawn under the dots; paths of dancers who pass too close are red.
 import type { Controller } from "../app/controller";
 import type { AppState } from "../app/state";
+import { closeEncounters } from "../model/collisions";
 import { activeFormationAt, positionsAt } from "../model/interpolate";
 import { SVG_STAGE_HEIGHT, gridLines, stageAspect, stageToSvg, svgToStage, toViewCoords, type ViewMode } from "../model/stage";
 import { WING_MARGIN, type Dancer, type Position } from "../model/types";
@@ -10,6 +13,7 @@ import { el, svgEl } from "./dom";
 import { initials } from "./format";
 
 const DANCER_RADIUS = 3.4;
+const GHOST_RADIUS = 1.6;
 /** Labels sit inside the wings strip so the view can be framed tightly around the stage. */
 const GRID_LABEL_OFFSET = 3.5;
 const EDGE_LABEL_INSET = 2;
@@ -25,8 +29,9 @@ interface DancerNode {
 export function mountStageView(root: HTMLElement, controller: Controller): void {
   const svg = svgEl("svg", { class: "stage-svg", role: "img", "aria-label": "Stage with dancers", preserveAspectRatio: "xMidYMid meet" });
   const gridLayer = svgEl("g", { class: "grid" });
+  const pathLayer = svgEl("g", { class: "paths", "aria-hidden": "true" });
   const dancerLayer = svgEl("g", { class: "dancers" });
-  svg.append(gridLayer, dancerLayer);
+  svg.append(gridLayer, pathLayer, dancerLayer);
   const hint = el("p", { class: "stage-hint", "aria-live": "polite" });
   root.append(svg, hint);
 
@@ -110,12 +115,37 @@ export function mountStageView(root: HTMLElement, controller: Controller): void 
     else hint.textContent = "";
   };
 
+  const renderPaths = (state: AppState) => {
+    const formation = state.canEdit && state.showPaths && !state.isPlaying ? activeFormationAt(state.routine, state.playheadSeconds) : null;
+    const index = formation ? state.routine.formations.indexOf(formation) : -1;
+    if (!formation || index < 1) {
+      pathLayer.replaceChildren();
+      return;
+    }
+    const previous = state.routine.formations[index - 1]!;
+    const crowded = new Set(closeEncounters(state.routine, formation.id).flatMap((encounter) => encounter.dancerIds));
+    const aspect = stageAspect(state.routine.stage);
+    const toSvg = (position: Position) => stageToSvg(toViewCoords(position, state.view), aspect);
+    pathLayer.replaceChildren(
+      ...state.routine.dancers.flatMap((dancer) => {
+        const from = toSvg(previous.positions[dancer.id]!);
+        const to = toSvg(formation.positions[dancer.id]!);
+        const className = crowded.has(dancer.id) ? "path collides" : "path";
+        return [
+          svgEl("line", { class: className, x1: from.x, y1: from.y, x2: to.x, y2: to.y, stroke: dancer.color }),
+          svgEl("circle", { class: "ghost", cx: from.x, cy: from.y, r: GHOST_RADIUS, stroke: dancer.color }),
+        ];
+      }),
+    );
+  };
+
   const render = (state: AppState) => {
     const key = JSON.stringify([state.routine.stage, state.view]);
     if (key !== gridKey) {
       gridKey = key;
       renderGrid(svg, gridLayer, state, state.view);
     }
+    renderPaths(state);
     renderDancers(state);
     renderHint(state);
   };
@@ -127,7 +157,8 @@ export function mountStageView(root: HTMLElement, controller: Controller): void 
       next.view !== previous.view ||
       next.selectedDancerId !== previous.selectedDancerId ||
       next.canEdit !== previous.canEdit ||
-      next.isPlaying !== previous.isPlaying
+      next.isPlaying !== previous.isPlaying ||
+      next.showPaths !== previous.showPaths
     ) {
       render(next);
     }

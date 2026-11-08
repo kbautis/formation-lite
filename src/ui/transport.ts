@@ -14,6 +14,7 @@ export function mountTransport(root: HTMLElement, controller: Controller, newId:
   const count = el("span", { class: "count-readout" });
   const addButton = el("button", { type: "button", "data-edit-only": true }, ["+ Formation"]);
   const flipButton = el("button", { type: "button", "aria-pressed": "false" });
+  const pathsButton = el("button", { type: "button", "data-edit-only": true, "aria-label": "Show paths", title: "Show each dancer's path from the previous formation" }, ["Paths"]);
   const undoButton = el("button", { type: "button", "data-edit-only": true, "aria-label": "Undo" }, ["Undo"]);
   const redoButton = el("button", { type: "button", "data-edit-only": true, "aria-label": "Redo" }, ["Redo"]);
   const zoomOut = el("button", { type: "button", class: "icon-button", "aria-label": "Zoom timeline out" }, ["−"]);
@@ -25,6 +26,7 @@ export function mountTransport(root: HTMLElement, controller: Controller, newId:
     el("div", { class: "readout" }, [time, count]),
     addButton,
     flipButton,
+    pathsButton,
     el("div", { class: "spacer" }),
     undoButton,
     redoButton,
@@ -37,6 +39,7 @@ export function mountTransport(root: HTMLElement, controller: Controller, newId:
     controller.edit((routine) => addFormationAt(routine, { id: newId(), seconds }));
   });
   flipButton.addEventListener("click", () => controller.toggleView());
+  pathsButton.addEventListener("click", () => controller.togglePaths());
   undoButton.addEventListener("click", () => controller.undo());
   redoButton.addEventListener("click", () => controller.redo());
   zoomOut.addEventListener("click", () => controller.zoom(1 / ZOOM_STEP));
@@ -54,6 +57,7 @@ export function mountTransport(root: HTMLElement, controller: Controller, newId:
     undoButton.disabled = !controller.canUndo();
     redoButton.disabled = !controller.canRedo();
     zoomFit.setAttribute("aria-pressed", String(state.timelineFit));
+    pathsButton.setAttribute("aria-pressed", String(state.showPaths));
   };
   controller.store.subscribe(render);
   render(controller.store.getState());

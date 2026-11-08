@@ -25,6 +25,7 @@ export const POSITION_MIN = -WING_MARGIN;
 export const POSITION_MAX = 1 + WING_MARGIN;
 export const STAGGER_SPREAD_MIN = 0.1;
 export const STAGGER_SPREAD_MAX = 0.9;
+export const STAGGER_SPREAD_DEFAULT = 0.5;
 
 export type LengthUnit = "ft" | "m";
 

@@ -5,6 +5,7 @@ import { StorageError, openDatabase } from "./storage/database";
 import { el, requireElement } from "./ui/dom";
 import { mountDancerPanel } from "./ui/dancerPanel";
 import { mountFormationInspector } from "./ui/formationInspector";
+import { mountTransitionPanel } from "./ui/transitionPanel";
 import { mountKeyboard } from "./ui/keyboard";
 import { mountNotice } from "./ui/notice";
 import { mountSidebarToggle } from "./ui/sidebarToggle";
@@ -80,6 +81,7 @@ async function boot(): Promise<void> {
   mountStagePanel(stageSection, controller);
   mountDancerPanel(dancerSection, controller, newId);
   mountFormationInspector(formationSection, controller, newId);
+  mountTransitionPanel(formationSection, controller);
   mountTransport(transport, controller, newId);
   mountSidebarToggle(transport);
   mountTimelineView(timeline, controller);

@@ -5,6 +5,7 @@ import {
   holdSecondsForEnd,
   moveDancer,
   setSongInfo,
+  startSecondsForDrag,
   updateFormationTiming,
 } from "../model/edits";
 import { createRoutine } from "../model/factory";
@@ -12,7 +13,7 @@ import { canRedo, canUndo, createHistory, pushHistory, redo, replacePresent, und
 import { clampToWings } from "../model/stage";
 import { fitPixelsPerSecond, timelineDurationSeconds } from "../model/timeline";
 import { touchRoutine } from "../model/edits";
-import type { Position, Routine } from "../model/types";
+import type { Formation, Position, Routine } from "../model/types";
 import { downloadRoutine, readRoutineFile } from "../io/files";
 import { songDurationsMatch } from "../io/serialize";
 import { AudioClock } from "../playback/audioClock";
@@ -52,8 +53,11 @@ interface DragSession {
   readonly before: Routine;
 }
 
-interface HoldDragSession {
+export type FormationEdge = "start" | "end";
+
+interface EdgeDragSession {
   readonly formationId: string;
+  readonly edge: FormationEdge;
   readonly before: Routine;
 }
 
@@ -62,7 +66,7 @@ export class Controller {
   private readonly deps: ControllerDependencies;
   private clock: PlaybackClock;
   private drag: DragSession | null = null;
-  private holdDrag: HoldDragSession | null = null;
+  private edgeDrag: EdgeDragSession | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
   private animationFrame: number | null = null;
@@ -85,6 +89,7 @@ export class Controller {
       canEdit: deps.canEdit,
       pixelsPerSecond: DEFAULT_PIXELS_PER_SECOND,
       timelineFit: true,
+      showPaths: true,
     });
   }
 
@@ -236,33 +241,36 @@ export class Controller {
     this.finishDrag(drag.before);
   }
 
-  /** Starts dragging a formation's end on the timeline. Moves the playhead into it so the sidebar shows its hold. */
-  beginHoldDrag(formationId: string): boolean {
+  /**
+   * Starts dragging a formation's edge on the timeline: "end" changes how long it holds,
+   * "start" changes when it starts and keeps its end. Moves the playhead into the
+   * formation so the sidebar shows it while it changes.
+   */
+  beginEdgeDrag(formationId: string, edge: FormationEdge): boolean {
     if (!this.state.canEdit) return false;
     const formation = this.state.routine.formations.find((candidate) => candidate.id === formationId);
     if (!formation) throw new EditError(`No formation with id "${formationId}".`);
     this.pause();
     this.seek(formation.startSeconds);
-    this.holdDrag = { formationId, before: this.state.routine };
+    this.edgeDrag = { formationId, edge, before: this.state.routine };
     return true;
   }
 
-  dragHoldTo(endSeconds: number): void {
-    const drag = this.holdDrag;
+  dragEdgeTo(seconds: number): void {
+    const drag = this.edgeDrag;
     if (!drag) return;
     const routine = this.state.routine;
     const formation = routine.formations.find((candidate) => candidate.id === drag.formationId)!;
-    const holdSeconds = holdSecondsForEnd(routine, drag.formationId, endSeconds);
-    if (holdSeconds === formation.holdSeconds) return;
-    this.store.setState({
-      routine: updateFormationTiming(routine, drag.formationId, { startSeconds: formation.startSeconds, holdSeconds }),
-    });
+    const timing = timingForEdgeDrag(routine, formation, drag.edge, seconds);
+    if (timing.startSeconds === formation.startSeconds && timing.holdSeconds === formation.holdSeconds) return;
+    this.store.setState({ routine: updateFormationTiming(routine, drag.formationId, timing) });
+    if (this.state.playheadSeconds < timing.startSeconds) this.seek(timing.startSeconds);
   }
 
-  endHoldDrag(): void {
-    const drag = this.holdDrag;
+  endEdgeDrag(): void {
+    const drag = this.edgeDrag;
     if (!drag) return;
-    this.holdDrag = null;
+    this.edgeDrag = null;
     this.finishDrag(drag.before);
   }
 
@@ -274,9 +282,9 @@ export class Controller {
   }
 
   private cancelDrag(): void {
-    const before = this.drag?.before ?? this.holdDrag?.before;
+    const before = this.drag?.before ?? this.edgeDrag?.before;
     this.drag = null;
-    this.holdDrag = null;
+    this.edgeDrag = null;
     if (before) this.store.setState({ routine: before });
   }
 
@@ -420,6 +428,10 @@ export class Controller {
     this.store.setState({ view: this.state.view === "audience" ? "dancer" : "audience" });
   }
 
+  togglePaths(): void {
+    this.store.setState({ showPaths: !this.state.showPaths });
+  }
+
   selectDancer(dancerId: string | null): void {
     this.store.setState({ selectedDancerId: dancerId });
   }
@@ -534,6 +546,15 @@ export class Controller {
     const others = this.state.savedRoutines.filter((candidate) => candidate.id !== saved.id);
     this.store.setState({ saveStatus: "saved", savedRoutines: [saved, ...others] });
   }
+}
+
+/** New start and hold for a formation whose edge is dragged to `seconds`; the other edge stays put. */
+function timingForEdgeDrag(routine: Routine, formation: Formation, edge: FormationEdge, seconds: number) {
+  if (edge === "end") {
+    return { startSeconds: formation.startSeconds, holdSeconds: holdSecondsForEnd(routine, formation.id, seconds) };
+  }
+  const startSeconds = startSecondsForDrag(routine, formation.id, seconds);
+  return { startSeconds, holdSeconds: formation.startSeconds + formation.holdSeconds - startSeconds };
 }
 
 function clampZoom(pixelsPerSecond: number): number {
