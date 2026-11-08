@@ -2,7 +2,8 @@
 // Every position passes through toViewCoords on the way in and out, so the dancer's view
 // is purely a rendering choice. The grid only rebuilds when the stage size or view changes.
 // While editing a formation (paused, on its hold), each dancer's path from the previous
-// formation is drawn under the dots; paths of dancers who pass too close are red.
+// formation is drawn under the dots; paths of dancers who pass too close are red (if
+// the collision check is on).
 import type { Controller } from "../app/controller";
 import type { AppState } from "../app/state";
 import { closeEncounters } from "../model/collisions";
@@ -123,7 +124,8 @@ export function mountStageView(root: HTMLElement, controller: Controller): void 
       return;
     }
     const previous = state.routine.formations[index - 1]!;
-    const crowded = new Set(closeEncounters(state.routine, formation.id).flatMap((encounter) => encounter.dancerIds));
+    const encounters = state.checkCollisions ? closeEncounters(state.routine, formation.id) : [];
+    const crowded = new Set(encounters.flatMap((encounter) => encounter.dancerIds));
     const aspect = stageAspect(state.routine.stage);
     const toSvg = (position: Position) => stageToSvg(toViewCoords(position, state.view), aspect);
     pathLayer.replaceChildren(
@@ -158,7 +160,8 @@ export function mountStageView(root: HTMLElement, controller: Controller): void 
       next.selectedDancerId !== previous.selectedDancerId ||
       next.canEdit !== previous.canEdit ||
       next.isPlaying !== previous.isPlaying ||
-      next.showPaths !== previous.showPaths
+      next.showPaths !== previous.showPaths ||
+      next.checkCollisions !== previous.checkCollisions
     ) {
       render(next);
     }

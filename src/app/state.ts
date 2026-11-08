@@ -47,6 +47,8 @@ export interface AppState {
   readonly timelineFit: boolean;
   /** Draw each dancer's path from the previous formation while editing. */
   readonly showPaths: boolean;
+  /** Warn when dancers pass too close mid-transition. A per-device preference, on by default. */
+  readonly checkCollisions: boolean;
 }
 
 export const DEFAULT_PIXELS_PER_SECOND = 20;

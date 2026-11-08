@@ -15,7 +15,7 @@ to treat a file format as a versioned public contract.
 - Language: TypeScript 7.0 in `strict` mode, ES2022 modules
 - Frontend: vanilla TypeScript, DOM + inline SVG, no UI framework
 - Build/dev server: Vite 8
-- Storage: browser IndexedDB (routines + songs) and `localStorage` (last-opened id only)
+- Storage: browser IndexedDB (routines + songs) and `localStorage` (per-device preferences: last-opened routine, hidden panels, collision check)
 - Audio: HTML `<audio>` element as the playback clock
 - Unit tests: Vitest 5 with jsdom 31 and fake-indexeddb 6
 - Browser smoke test: the machine's pre-installed Playwright + Chromium, via `npm run smoke`
@@ -77,7 +77,7 @@ formation-lite/
 │       ├── keyboard.ts           # Space, ←/→, undo/redo shortcuts
 │       ├── notice.ts             # toast notices + "not saving" banner
 │       ├── toolbar.ts            # routine name, routine picker, new/open file/export/delete, save status
-│       ├── transport.ts          # play/pause, readout, add formation, flip, Paths, undo/redo, zoom −/Fit/+
+│       ├── transport.ts          # play/pause, readout, add formation, flip, Paths, Collisions, undo/redo, zoom −/Fit/+
 │       ├── stagePanel.ts         # open stage vs. real width × depth
 │       ├── sidebarToggle.ts      # Hide/Show panels so the stage gets the full width (per-device preference)
 │       ├── songPanel.ts          # load song, BPM, tap first beat

@@ -6,7 +6,7 @@
 // Dragging a block's right edge changes its hold; its left edge changes its start. The
 // zoom is frozen during an edge drag (refit afterwards), or a growing timeline would
 // rezoom under the pointer. The gap before each formation is drawn as a labeled
-// transition segment, red when dancers pass too close in it.
+// transition segment, red when dancers pass too close in it (if the check is on).
 import type { Controller } from "../app/controller";
 import type { AppState } from "../app/state";
 import type { FormationEdge } from "../app/controller";
@@ -117,7 +117,7 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
     }
 
     const active = activeFormationAt(routine, state.playheadSeconds);
-    const encounters = encountersByFormation(routine);
+    const encounters = state.checkCollisions ? encountersByFormation(routine) : new Map();
     const transitions = routine.formations.slice(1).map((formation, index) => {
       const previous = routine.formations[index]!;
       const gap = formation.startSeconds - holdEnd(previous);
@@ -179,7 +179,12 @@ export function mountTimelineView(root: HTMLElement, controller: Controller): vo
       refit();
       next = controller.store.getState();
     }
-    if (next.routine !== previous.routine || next.pixelsPerSecond !== previous.pixelsPerSecond || next.canEdit !== previous.canEdit) {
+    if (
+      next.routine !== previous.routine ||
+      next.pixelsPerSecond !== previous.pixelsPerSecond ||
+      next.canEdit !== previous.canEdit ||
+      next.checkCollisions !== previous.checkCollisions
+    ) {
       renderContent(next);
     }
     if (next.playheadSeconds !== previous.playheadSeconds || next.routine !== previous.routine || next.pixelsPerSecond !== previous.pixelsPerSecond) {

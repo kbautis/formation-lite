@@ -35,6 +35,7 @@ export const NOTICE_DURATION_MILLISECONDS = 5000;
 export const SONG_METADATA_TIMEOUT_MILLISECONDS = 10_000;
 export const NEW_ROUTINE_NAME = "Untitled routine";
 const LAST_OPENED_KEY = "formation-lite:last-opened-routine";
+const COLLISION_CHECK_OFF_KEY = "formation-lite:collision-check-off";
 const FALLBACK_AUDIO_MIME_TYPE = "audio/mpeg";
 
 export interface ControllerDependencies {
@@ -90,6 +91,7 @@ export class Controller {
       pixelsPerSecond: DEFAULT_PIXELS_PER_SECOND,
       timelineFit: true,
       showPaths: true,
+      checkCollisions: !readFlag(COLLISION_CHECK_OFF_KEY),
     });
   }
 
@@ -428,6 +430,13 @@ export class Controller {
     this.store.setState({ view: this.state.view === "audience" ? "dancer" : "audience" });
   }
 
+  /** Turns the "dancers pass too close" warnings on or off; remembered on this device. */
+  toggleCollisionCheck(): void {
+    const checkCollisions = !this.state.checkCollisions;
+    this.store.setState({ checkCollisions });
+    writeFlag(COLLISION_CHECK_OFF_KEY, !checkCollisions);
+  }
+
   togglePaths(): void {
     this.store.setState({ showPaths: !this.state.showPaths });
   }
@@ -559,6 +568,22 @@ function timingForEdgeDrag(routine: Routine, formation: Formation, edge: Formati
 
 function clampZoom(pixelsPerSecond: number): number {
   return Math.min(MAX_PIXELS_PER_SECOND, Math.max(MIN_PIXELS_PER_SECOND, pixelsPerSecond));
+}
+
+function readFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function writeFlag(key: string, value: boolean): void {
+  try {
+    localStorage.setItem(key, String(value));
+  } catch {
+    // A remembered preference is a convenience; the toggle still works this session.
+  }
 }
 
 function readLastOpenedId(): string | null {

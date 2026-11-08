@@ -240,3 +240,22 @@ describe("Controller paths", () => {
     expect(controller.store.getState().showPaths).toBe(false);
   });
 });
+
+describe("Controller collision check", () => {
+  it("is on by default", async () => {
+    const controller = makeController();
+    await controller.start();
+    expect(controller.store.getState().checkCollisions).toBe(true);
+  });
+
+  it("can be turned off, and this device remembers it", async () => {
+    const controller = makeController();
+    await controller.start();
+    controller.toggleCollisionCheck();
+    expect(controller.store.getState().checkCollisions).toBe(false);
+    const reopened = makeController();
+    expect(reopened.store.getState().checkCollisions).toBe(false);
+    reopened.toggleCollisionCheck();
+    expect(makeController().store.getState().checkCollisions).toBe(true);
+  });
+});

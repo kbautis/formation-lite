@@ -4,7 +4,8 @@
 // - Everything here edits through model functions (setTransitionIn, setStagger) via
 //   controller.edit, so each change is one undo step and is validated like any edit.
 // - Lengths are entered in counts with a BPM and seconds without, like the hold field.
-// - Encounters come from closeEncounters (pure); "Show" seeks to the closest moment.
+// - Encounters come from closeEncounters (pure), only while the collision check is on;
+//   "Show" seeks to the closest moment.
 import type { Controller } from "../app/controller";
 import type { AppState } from "../app/state";
 import { closeEncounters, type Encounter } from "../model/collisions";
@@ -104,11 +105,14 @@ export function mountTransitionPanel(root: HTMLElement, controller: Controller):
     spreadField.hidden = formation.stagger === null;
     if (document.activeElement !== spreadInput) spreadInput.value = String(Math.round((formation.stagger?.spread ?? STAGGER_SPREAD_DEFAULT) * PERCENT));
 
-    renderEncounters(encounterList, closeEncounters(state.routine, formation.id), state.routine, controller);
+    const encounters = state.checkCollisions ? closeEncounters(state.routine, formation.id) : [];
+    renderEncounters(encounterList, encounters, state.routine, controller);
   };
 
   controller.store.subscribe((next, previous) => {
-    if (next.routine !== previous.routine || next.playheadSeconds !== previous.playheadSeconds) render(next);
+    if (next.routine !== previous.routine || next.playheadSeconds !== previous.playheadSeconds || next.checkCollisions !== previous.checkCollisions) {
+      render(next);
+    }
   });
   render(controller.store.getState());
 }

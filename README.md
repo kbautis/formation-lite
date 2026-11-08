@@ -38,7 +38,8 @@ With a formation selected, the sidebar's **Transition in** section sets:
 
 While you're on a formation, each dancer's path from the previous formation is drawn on
 the stage (toggle with **Paths**). If two dancers pass closer than 2 ft (0.6 m) mid-move,
-their paths and the transition turn red and the sidebar says who and when. The timeline fits the whole song in the window; **−/+** zoom in for detail and **Fit**
+their paths and the transition turn red and the sidebar says who and when. The collision
+check is optional: turn it off with **Collisions** (this device remembers the choice). The timeline fits the whole song in the window; **−/+** zoom in for detail and **Fit**
 shows the whole song again. **Hide panels** (bottom right) gives the stage the full width; this device
 remembers the choice. ←/→ step one count (or one second without a BPM). Ctrl/⌘+Z undoes.
 

@@ -344,6 +344,16 @@ async function main() {
     check((await teammatePage.locator(".path.collides").count()) === 2, "both crossing paths are drawn as collisions");
     check((await teammatePage.locator(".encounter").first().textContent()).includes("Ana Reyes and Ben Ito"), "the sidebar names who passes too close");
     await teammatePage.screenshot({ path: path.join(ARTIFACTS, "crossing.png") });
+
+    // The collision check is optional.
+    await teammatePage.click("[aria-label='Warn about collisions']");
+    check(
+      (await teammatePage.locator(".transition-segment.has-collision, .path.collides, .encounter").count()) === 0,
+      "turning collisions off removes every collision warning",
+    );
+    check((await teammatePage.locator(".paths .path").count()) === 2, "paths still show with collisions off");
+    await teammatePage.click("[aria-label='Warn about collisions']");
+    check((await teammatePage.locator(".encounter").count()) === 1, "turning collisions back on restores the warnings");
     await teammate.close();
 
     // ── Phone: view-only ────────────────────────────────────────────────────
