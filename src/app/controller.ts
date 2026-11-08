@@ -133,16 +133,17 @@ export class Controller {
   /** Deletes the open routine and its song from this device; on a storage failure it stays open and the user is told. */
   async deleteCurrentRoutine(): Promise<void> {
     const routine = this.routine;
-    this.cancelPendingSave();
     if (this.deps.database) {
       try {
         await deleteRoutineWithSong(this.deps.database, routine.id);
       } catch (error) {
         if (!isStorageFailure(error)) throw error;
+        // The routine stays open, so its pending autosave must still run.
         this.notify("error", `Couldn't delete “${routine.name}” from this device. Try again, or reload the page.`);
         return;
       }
     }
+    this.cancelPendingSave();
     const remaining = this.state.savedRoutines.filter((candidate) => candidate.id !== routine.id);
     this.store.setState({ savedRoutines: remaining });
     if (remaining[0]) await this.show(remaining[0]);
@@ -173,12 +174,25 @@ export class Controller {
 
   // ── Edits ─────────────────────────────────────────────────────────────────
 
-  /** Applies a model edit as one undo step. Refused edits show their message and return false. */
+  /**
+   * Applies a model edit as one undo step. Refused edits show their message and return false.
+   * An edit that arrives mid-drag (e.g. a sidebar field's change event, which fires on blur
+   * after the stage's pointerdown) ends the drag so far as its own undo step, lands on top
+   * of it, and the drag then continues from the edited routine, so nothing typed is lost.
+   */
   edit(change: (routine: Routine) => Routine): boolean {
     if (!this.state.canEdit) {
       this.notify("info", "Editing is available on a larger screen. This screen is view-only.");
       return false;
     }
+    const drag = this.drag;
+    if (drag) this.endDrag();
+    const applied = this.applyEdit(change);
+    if (drag) this.resumeDrag(drag);
+    return applied;
+  }
+
+  private applyEdit(change: (routine: Routine) => Routine): boolean {
     let next: Routine;
     try {
       next = change(this.routine);
@@ -274,6 +288,14 @@ export class Controller {
       this.notify("info", error.message);
       return false;
     }
+  }
+
+  /** Continues a drag interrupted by an edit, unless the edit removed what was being dragged. */
+  private resumeDrag(drag: DragSession): void {
+    const routine = this.routine;
+    const formationExists = routine.formations.some((formation) => formation.id === drag.formationId);
+    const dancerExists = drag.kind !== "dancer" || routine.dancers.some((dancer) => dancer.id === drag.dancerId);
+    if (formationExists && dancerExists) this.drag = { ...drag, before: routine };
   }
 
   /** Mid-drag the present changes in place; the undo step is pushed once, in endDrag. */

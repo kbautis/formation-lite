@@ -3,7 +3,7 @@ import { IDBFactory } from "fake-indexeddb";
 import { Controller } from "../../src/app/controller";
 import { openDatabase } from "../../src/storage/database";
 import { listRoutines, saveRoutine } from "../../src/storage/routines";
-import { addDancer, renameRoutine } from "../../src/model/edits";
+import { addDancer, removeDancer, renameRoutine } from "../../src/model/edits";
 import type { SongSource } from "../../src/playback/songLoader";
 import { SongLoadCancelledError } from "../../src/playback/songLoader";
 import { validRoutineInput } from "../fixtures/routines";
@@ -91,6 +91,23 @@ describe("Controller.deleteCurrentRoutine", () => {
     expect(ids).toHaveLength(1);
   });
 
+  it("keeps the pending autosave when the delete fails, so the last edit is still saved", async () => {
+    await saveRoutine(database, validRoutineInput());
+    const controller = makeController();
+    await controller.start();
+    controller.edit((routine) => renameRoutine(routine, "Edited just before delete"));
+    // Only the delete (a transaction over both stores) fails; ordinary saves still work.
+    const transaction = database.transaction.bind(database);
+    database.transaction = ((names: string | string[], mode?: IDBTransactionMode) => {
+      if (Array.isArray(names)) throw new DOMException("blocked", "InvalidStateError");
+      return transaction(names, mode);
+    }) as IDBDatabase["transaction"];
+    await controller.deleteCurrentRoutine();
+    await controller.flushPendingSave();
+    expect(controller.store.getState().saveStatus).toBe("saved");
+    expect((await listRoutines(database)).routines[0]?.name).toBe("Edited just before delete");
+  });
+
   it("tells the user and keeps the routine open when device storage fails", async () => {
     await saveRoutine(database, validRoutineInput());
     const controller = makeController();
@@ -158,6 +175,38 @@ describe("Controller dancer drag", () => {
     controller.undo();
     expect(controller.routine.formations[0]!.positions["d-1"]).not.toEqual({ x: 0.3, y: 0.3 });
     expect(controller.routine.dancers).toHaveLength(1);
+  });
+
+  it("records an edit made mid-drag as its own undo step and keeps the drag going", async () => {
+    const controller = makeController();
+    await controller.start();
+    controller.edit((routine) => addDancer(routine, { id: "d-1", name: "Ana", color: "#e6194b" }));
+    const start = controller.routine.formations[0]!.positions["d-1"];
+    controller.beginDrag("d-1");
+    controller.dragTo({ x: 0.3, y: 0.3 });
+    expect(controller.edit((routine) => renameRoutine(routine, "Renamed"))).toBe(true);
+    controller.dragTo({ x: 0.4, y: 0.4 });
+    controller.endDrag();
+    const position = () => controller.routine.formations[0]!.positions["d-1"];
+    expect(controller.routine.name).toBe("Renamed");
+    expect(position()).toEqual({ x: 0.4, y: 0.4 });
+    controller.undo();
+    expect([controller.routine.name, position()]).toEqual(["Renamed", { x: 0.3, y: 0.3 }]);
+    controller.undo();
+    expect([controller.routine.name, position()]).toEqual(["Untitled routine", { x: 0.3, y: 0.3 }]);
+    controller.undo();
+    expect([controller.routine.name, position()]).toEqual(["Untitled routine", start]);
+  });
+
+  it("ends the drag when an edit mid-drag removes what is being dragged", async () => {
+    const controller = makeController();
+    await controller.start();
+    controller.edit((routine) => addDancer(routine, { id: "d-1", name: "Ana", color: "#e6194b" }));
+    controller.beginDrag("d-1");
+    controller.edit((routine) => removeDancer(routine, "d-1"));
+    expect(() => controller.dragTo({ x: 0.5, y: 0.5 })).not.toThrow();
+    controller.endDrag();
+    expect(controller.routine.dancers).toEqual([]);
   });
 
   it("refuses to start a drag mid-transition", async () => {
