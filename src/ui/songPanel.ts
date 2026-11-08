@@ -1,6 +1,7 @@
 // Sidebar "Music": load the song, optional BPM, and where count 1 lands.
 import type { Controller } from "../app/controller";
-import type { AppState } from "../app/state";
+import { currentRoutine, type AppState } from "../app/state";
+import { watch } from "../app/store";
 import { setTempo } from "../model/edits";
 import { formatTime } from "../model/time";
 import { BPM_MAX, BPM_MIN } from "../model/types";
@@ -38,19 +39,21 @@ export function mountSongPanel(root: HTMLElement, controller: Controller): void 
   });
   bpmInput.addEventListener("change", () => {
     const text = bpmInput.value.trim();
-    const current = controller.store.getState().routine.tempo;
+    const current = controller.routine.tempo;
     const tempo = text === "" ? null : { bpm: Number(text), firstBeatSeconds: current?.firstBeatSeconds ?? 0 };
     if (!controller.edit((routine) => setTempo(routine, tempo))) bpmInput.value = current ? String(current.bpm) : "";
   });
   countOneButton.addEventListener("click", () => {
-    const { routine, playheadSeconds } = controller.store.getState();
+    const { routine } = controller;
+    const { playheadSeconds } = controller.store.getState();
     if (!routine.tempo) return;
     const tempo = { bpm: routine.tempo.bpm, firstBeatSeconds: playheadSeconds };
     controller.edit((current) => setTempo(current, tempo));
   });
 
   const render = (state: AppState) => {
-    const { routine, loadedSong } = state;
+    const routine = currentRoutine(state);
+    const { loadedSong } = state;
     if (loadedSong) {
       songName.textContent = `${loadedSong.fileName} · ${formatTime(loadedSong.durationSeconds)}`;
       songName.dataset.state = "loaded";
@@ -67,8 +70,5 @@ export function mountSongPanel(root: HTMLElement, controller: Controller): void 
       ? `Count 1 at ${formatTime(routine.tempo.firstBeatSeconds)}. Play the song, pause on the first “1”, then press the button.`
       : "Add a BPM to see 8-counts on the timeline.";
   };
-  controller.store.subscribe((next, previous) => {
-    if (next.routine !== previous.routine || next.loadedSong !== previous.loadedSong) render(next);
-  });
-  render(controller.store.getState());
+  watch(controller.store, (state) => [state.history.present, state.loadedSong], render);
 }

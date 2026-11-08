@@ -1,6 +1,7 @@
 // Header: routine name, routine picker, new/import/export/delete, save status.
 import type { Controller } from "../app/controller";
-import type { AppState, SaveStatus } from "../app/state";
+import { currentRoutine, type AppState, type SaveStatus } from "../app/state";
+import { watch } from "../app/store";
 import { renameRoutine } from "../model/edits";
 import { ROUTINE_NAME_MAX_LENGTH } from "../model/types";
 import { el, syncInputValue } from "./dom";
@@ -36,7 +37,7 @@ export function mountToolbar(root: HTMLElement, controller: Controller): void {
 
   nameInput.addEventListener("change", () => {
     if (!controller.edit((routine) => renameRoutine(routine, nameInput.value))) {
-      nameInput.value = controller.store.getState().routine.name;
+      nameInput.value = controller.routine.name;
     }
   });
   nameInput.addEventListener("keydown", (event) => {
@@ -57,38 +58,25 @@ export function mountToolbar(root: HTMLElement, controller: Controller): void {
   });
   exportButton.addEventListener("click", () => controller.exportCurrentRoutine());
   deleteButton.addEventListener("click", () => {
-    const { routine } = controller.store.getState();
+    const { routine } = controller;
     if (window.confirm(`Delete “${routine.name}” and its song from this device? This can't be undone.`)) {
       void controller.deleteCurrentRoutine();
     }
   });
 
   const renderPicker = (state: AppState) => {
-    const routines = state.savedRoutines.some((routine) => routine.id === state.routine.id)
-      ? state.savedRoutines
-      : [state.routine, ...state.savedRoutines];
-    picker.replaceChildren(
-      ...routines.map((routine) => el("option", { value: routine.id, selected: routine.id === state.routine.id }, [routine.name])),
-    );
-    picker.value = state.routine.id;
+    const routine = currentRoutine(state);
+    const routines = state.savedRoutines.some((saved) => saved.id === routine.id) ? state.savedRoutines : [routine, ...state.savedRoutines];
+    picker.replaceChildren(...routines.map((saved) => el("option", { value: saved.id, selected: saved.id === routine.id }, [saved.name])));
+    picker.value = routine.id;
   };
 
-  const render = (state: AppState, previous: AppState | null) => {
-    syncInputValue(nameInput, state.routine.name);
+  const render = (state: AppState) => {
+    syncInputValue(nameInput, currentRoutine(state).name);
     nameInput.readOnly = !state.canEdit;
-    if (!previous || state.savedRoutines !== previous.savedRoutines || state.routine.id !== previous.routine.id) renderPicker(state);
     status.textContent = SAVE_STATUS_TEXT[state.saveStatus];
     status.dataset.status = state.saveStatus;
   };
-  controller.store.subscribe((next, previous) => {
-    if (
-      next.routine !== previous.routine ||
-      next.savedRoutines !== previous.savedRoutines ||
-      next.saveStatus !== previous.saveStatus ||
-      next.canEdit !== previous.canEdit
-    ) {
-      render(next, previous);
-    }
-  });
-  render(controller.store.getState(), null);
+  watch(controller.store, (state) => [state.savedRoutines, currentRoutine(state).id], renderPicker);
+  watch(controller.store, (state) => [currentRoutine(state).name, state.saveStatus, state.canEdit], render);
 }

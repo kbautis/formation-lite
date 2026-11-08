@@ -2,9 +2,9 @@
 // Node provides structuredClone, which fake-indexeddb needs and jsdom may not.
 import { beforeEach, describe, expect, it } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
-import { DATABASE_NAME, ROUTINES_STORE, StorageError, openDatabase } from "../../src/storage/database";
-import { deleteRoutineWithSong, listRoutines, loadRoutine, saveRoutine } from "../../src/storage/routines";
-import { deleteSong, loadSong, saveSong } from "../../src/storage/songs";
+import { DATABASE_NAME, ROUTINES_STORE, StorageError, isStorageFailure, openDatabase } from "../../src/storage/database";
+import { deleteRoutineWithSong, listRoutines, saveRoutine } from "../../src/storage/routines";
+import { loadSong, saveSong } from "../../src/storage/songs";
 import { RoutineFormatError } from "../../src/model/errors";
 import { renameRoutine, touchRoutine } from "../../src/model/edits";
 import { validRoutineInput } from "../fixtures/routines";
@@ -16,6 +16,11 @@ beforeEach(async () => {
   factory = new IDBFactory();
   database = await openDatabase(factory);
 });
+
+/** Reads one routine back the way the app does: through listRoutines. */
+async function savedRoutine(id: string, from: IDBDatabase = database) {
+  return (await listRoutines(from)).routines.find((routine) => routine.id === id);
+}
 
 function song(byteLength = 4) {
   return { fileName: "mix.mp3", mimeType: "audio/mpeg", durationSeconds: 183.42, bytes: new Uint8Array(byteLength).fill(7).buffer };
@@ -41,27 +46,25 @@ describe("routines", () => {
   it("round-trips a routine", async () => {
     const routine = validRoutineInput();
     await saveRoutine(database, routine);
-    expect(await loadRoutine(database, routine.id)).toEqual(routine);
+    expect(await savedRoutine(routine.id)).toEqual(routine);
   });
 
   it("overwrites on save with the same id", async () => {
     const routine = validRoutineInput();
     await saveRoutine(database, routine);
     await saveRoutine(database, renameRoutine(routine, "Renamed"));
-    expect((await loadRoutine(database, routine.id)).name).toBe("Renamed");
+    expect((await savedRoutine(routine.id))?.name).toBe("Renamed");
   });
 
   it("refuses to save an invalid routine", async () => {
     await expect(saveRoutine(database, { ...validRoutineInput(), name: "" })).rejects.toThrow(RoutineFormatError);
   });
 
-  it("throws StorageError for a missing routine", async () => {
-    await expect(loadRoutine(database, "missing")).rejects.toThrow(StorageError);
-  });
-
-  it("throws RoutineFormatError for a corrupt record", async () => {
+  it("reports a corrupt record instead of returning it", async () => {
     await putRaw({ ...validRoutineInput(), version: 99 });
-    await expect(loadRoutine(database, "routine-1")).rejects.toThrow(RoutineFormatError);
+    const listing = await listRoutines(database);
+    expect(listing.routines).toEqual([]);
+    expect(listing.corrupt).toEqual([{ id: "routine-1", message: expect.stringContaining("version") }]);
   });
 
   it("lists routines newest first and reports corrupt records separately", async () => {
@@ -82,7 +85,7 @@ describe("routines", () => {
     await saveRoutine(database, routine);
     await saveSong(database, routine.id, song());
     await deleteRoutineWithSong(database, routine.id);
-    await expect(loadRoutine(database, routine.id)).rejects.toThrow(StorageError);
+    expect(await savedRoutine(routine.id)).toBeUndefined();
     expect(await loadSong(database, routine.id)).toBeNull();
   });
 
@@ -90,7 +93,7 @@ describe("routines", () => {
     await saveRoutine(database, validRoutineInput());
     database.close();
     const reopened = await openDatabase(factory);
-    expect((await loadRoutine(reopened, "routine-1")).name).toBe("Regionals 2027");
+    expect((await savedRoutine("routine-1", reopened))?.name).toBe("Regionals 2027");
   });
 });
 
@@ -112,9 +115,13 @@ describe("songs", () => {
     await expect(saveSong(database, "routine-1", song(0))).rejects.toThrow(StorageError);
   });
 
-  it("deletes a song", async () => {
-    await saveSong(database, "routine-1", song());
-    await deleteSong(database, "routine-1");
-    expect(await loadSong(database, "routine-1")).toBeNull();
+});
+
+describe("isStorageFailure", () => {
+  it("is true for our storage errors and the browser's DOMExceptions, false for bugs", () => {
+    expect(isStorageFailure(new StorageError("full"))).toBe(true);
+    expect(isStorageFailure(new DOMException("quota", "QuotaExceededError"))).toBe(true);
+    expect(isStorageFailure(new TypeError("bug"))).toBe(false);
+    expect(isStorageFailure(new RoutineFormatError("id", "bad"))).toBe(false);
   });
 });

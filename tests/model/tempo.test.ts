@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { beatAt, beatsToSeconds, beatTimesBetween, countAt, countLabelAt, snapToBeat } from "../../src/model/tempo";
+import { beatAt, beatsToSeconds, secondsToBeats, beatTimesBetween, countAt, countLabelAt, snapToBeat } from "../../src/model/tempo";
 
 // 120 BPM = one beat every 0.5 s; the first "1" lands at 0.5 s.
 const tempo = { bpm: 120, firstBeatSeconds: 0.5 };
@@ -69,5 +69,12 @@ describe("beatTimesBetween", () => {
   });
   it("rejects a reversed window", () => {
     expect(() => beatTimesBetween(tempo, 2, 1)).toThrow();
+  });
+});
+
+describe("secondsToBeats", () => {
+  it("is the inverse of beatsToSeconds", () => {
+    expect(secondsToBeats(tempo, 2)).toBe(4);
+    expect(secondsToBeats(tempo, beatsToSeconds(tempo, 3))).toBe(3);
   });
 });

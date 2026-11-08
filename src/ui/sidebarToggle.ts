@@ -2,9 +2,10 @@
 // - The stage is the primary surface; the sidebar is secondary and can be hidden so the
 //   stage gets the full width. This is a per-device layout preference, not routine data,
 //   so it lives in a body class and localStorage, never in AppState or the share file.
-// - localStorage can throw (private mode, blocked storage); the toggle still works for the
-//   session and just isn't remembered.
+// - Remembered through storage/preferences.ts, which degrades to "not remembered" when
+//   storage is blocked; the toggle still works for the session.
 // - The button is edit-only: the phone layout already hides the sidebar.
+import { readPreference, writePreference } from "../storage/preferences";
 import { el } from "./dom";
 
 const SIDEBAR_HIDDEN_KEY = "formation-lite:sidebar-hidden";
@@ -28,17 +29,9 @@ export function mountSidebarToggle(root: HTMLElement): void {
 }
 
 function readSidebarHidden(): boolean {
-  try {
-    return localStorage.getItem(SIDEBAR_HIDDEN_KEY) === "true";
-  } catch {
-    return false;
-  }
+  return readPreference(SIDEBAR_HIDDEN_KEY) === "true";
 }
 
 function writeSidebarHidden(hidden: boolean): void {
-  try {
-    localStorage.setItem(SIDEBAR_HIDDEN_KEY, String(hidden));
-  } catch {
-    // Remembering the layout is a convenience; the toggle still works this session.
-  }
+  writePreference(SIDEBAR_HIDDEN_KEY, String(hidden));
 }

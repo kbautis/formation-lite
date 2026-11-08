@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CLOSE_DISTANCE, closeEncounters, encountersByFormation } from "../../src/model/collisions";
+import { CLOSE_DISTANCE, closeEncounters, encountersFor } from "../../src/model/collisions";
+import { moveDancer } from "../../src/model/edits";
 import type { Formation, Routine } from "../../src/model/types";
 import { validRoutineInput } from "../fixtures/routines";
 
@@ -75,10 +76,26 @@ describe("closeEncounters", () => {
   });
 });
 
-describe("encountersByFormation", () => {
+describe("encountersFor", () => {
   it("collects encounters for every transition, keyed by the formation moved into", () => {
-    const map = encountersByFormation(swap);
+    const map = encountersFor(swap);
     expect(map.get("f-2")).toHaveLength(1);
     expect(map.has("f-1")).toBe(false);
+  });
+
+  it("computes once per routine: the same routine gives the same result object", () => {
+    expect(encountersFor(swap)).toBe(encountersFor(swap));
+  });
+
+  it("only recomputes transitions next to an edited formation", () => {
+    // Four formations; moving a dancer in f-2 changes transitions into f-2 and f-3, not f-4.
+    const routine = validRoutineInput();
+    const later = (id: string, start: number) => ({ ...routine.formations[1]!, id, startSeconds: start, positions: swap.formations[id === "f-3" ? 0 : 1]!.positions });
+    const four: Routine = { ...swap, formations: [...swap.formations, later("f-3", 8), later("f-4", 12)] };
+    const before = encountersFor(four);
+    const edited = moveDancer(four, { formationId: "f-2", dancerId: "d-1", position: { x: 0.7, y: 0.5 } });
+    const after = encountersFor(edited);
+    expect(after.get("f-4")).toBe(before.get("f-4"));
+    expect(after.get("f-3")).not.toBe(before.get("f-3"));
   });
 });

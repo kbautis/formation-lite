@@ -6,13 +6,13 @@ import {
   addFormationAt,
   defaultSpot,
   editableFormationAt,
-  holdSecondsForEnd,
+  dragFormationEdge,
+  formationLabel,
   MIN_TRANSITION_BEATS,
   MIN_TRANSITION_SECONDS,
   minimumTransitionSeconds,
   setStagger,
   setTransitionIn,
-  startSecondsForDrag,
   transitionInSeconds,
   moveDancer,
   removeDancer,
@@ -34,6 +34,14 @@ import { validRoutineInput } from "../fixtures/routines";
 // Fixture: 2 dancers; f-1 holds 0–2 s, f-2 holds 4–6 s; tempo 120 BPM from 0.5 s.
 const base = validRoutineInput();
 const untimed: Routine = { ...base, tempo: null };
+
+// Edge drags go through dragFormationEdge; these read back the timing it produced.
+function holdAfterEndDrag(routine: Routine, formationId: string, seconds: number): number {
+  return dragFormationEdge(routine, formationId, "end", seconds).formations.find((f) => f.id === formationId)!.holdSeconds;
+}
+function startAfterStartDrag(routine: Routine, formationId: string, seconds: number): number {
+  return dragFormationEdge(routine, formationId, "start", seconds).formations.find((f) => f.id === formationId)!.startSeconds;
+}
 
 function expectValid(routine: Routine): void {
   expect(parseRoutine(routine)).toEqual(routine);
@@ -243,34 +251,34 @@ describe("editableFormationAt", () => {
   });
 });
 
-describe("holdSecondsForEnd", () => {
+describe("dragFormationEdge — right edge (hold)", () => {
   // untimed: f-1 holds 0–2 s, f-2 starts at 4 s. base: same, with 120 BPM from 0.5 s.
   it("is the time from the formation's start to the dragged end", () => {
-    expect(holdSecondsForEnd(untimed, "f-1", 3.2)).toBeCloseTo(3.2);
+    expect(holdAfterEndDrag(untimed, "f-1", 3.2)).toBeCloseTo(3.2);
   });
   it("stops a minimum transition before the next formation", () => {
-    expect(holdSecondsForEnd(untimed, "f-1", 9)).toBe(4 - MIN_TRANSITION_SECONDS);
+    expect(holdAfterEndDrag(untimed, "f-1", 9)).toBe(4 - MIN_TRANSITION_SECONDS);
     // 120 BPM: one count is 0.5 s.
-    expect(holdSecondsForEnd(base, "f-1", 9)).toBe(3.5);
+    expect(holdAfterEndDrag(base, "f-1", 9)).toBe(3.5);
   });
   it("can only shrink a gap that is already below the minimum", () => {
     const tight = updateFormationTiming(untimed, "f-1", { startSeconds: 0, holdSeconds: 3.8 });
-    expect(holdSecondsForEnd(tight, "f-1", 9)).toBe(3.8);
-    expect(holdSecondsForEnd(tight, "f-1", 3)).toBe(3);
+    expect(holdAfterEndDrag(tight, "f-1", 9)).toBe(3.8);
+    expect(holdAfterEndDrag(tight, "f-1", 3)).toBe(3);
   });
   it("never goes below zero", () => {
-    expect(holdSecondsForEnd(untimed, "f-2", 1)).toBe(0);
+    expect(holdAfterEndDrag(untimed, "f-2", 1)).toBe(0);
   });
   it("is unlimited after the last formation", () => {
-    expect(holdSecondsForEnd(untimed, "f-2", 30)).toBe(26);
+    expect(holdAfterEndDrag(untimed, "f-2", 30)).toBe(26);
   });
   it("snaps the end to the nearest beat when there is a tempo", () => {
-    expect(holdSecondsForEnd(base, "f-1", 3.2)).toBe(3);
-    expect(holdSecondsForEnd(base, "f-1", 3.3)).toBe(3.5);
+    expect(holdAfterEndDrag(base, "f-1", 3.2)).toBe(3);
+    expect(holdAfterEndDrag(base, "f-1", 3.3)).toBe(3.5);
   });
   it("rejects an unknown formation or a non-finite time", () => {
-    expect(() => holdSecondsForEnd(base, "ghost", 3)).toThrow(EditError);
-    expect(() => holdSecondsForEnd(base, "f-1", Number.NaN)).toThrow(EditError);
+    expect(() => holdAfterEndDrag(base, "ghost", 3)).toThrow(EditError);
+    expect(() => holdAfterEndDrag(base, "f-1", Number.NaN)).toThrow(EditError);
   });
 });
 
@@ -281,30 +289,30 @@ describe("minimumTransitionSeconds", () => {
   });
 });
 
-describe("startSecondsForDrag", () => {
+describe("dragFormationEdge — left edge (start)", () => {
   // untimed: f-1 holds 0–2 s; f-2 holds 4–6 s.
   it("moves the start to the dragged time", () => {
-    expect(startSecondsForDrag(untimed, "f-2", 5)).toBe(5);
+    expect(startAfterStartDrag(untimed, "f-2", 5)).toBe(5);
   });
   it("stops a minimum transition after the previous formation", () => {
-    expect(startSecondsForDrag(untimed, "f-2", 1)).toBe(2 + MIN_TRANSITION_SECONDS);
+    expect(startAfterStartDrag(untimed, "f-2", 1)).toBe(2 + MIN_TRANSITION_SECONDS);
   });
   it("never passes the formation's own end", () => {
-    expect(startSecondsForDrag(untimed, "f-2", 7)).toBe(6);
+    expect(startAfterStartDrag(untimed, "f-2", 7)).toBe(6);
   });
   it("never goes before 0 for the first formation", () => {
-    expect(startSecondsForDrag(untimed, "f-1", -1)).toBe(0);
+    expect(startAfterStartDrag(untimed, "f-1", -1)).toBe(0);
   });
   it("snaps to the nearest beat with a tempo", () => {
-    expect(startSecondsForDrag(base, "f-2", 4.7)).toBe(4.5);
+    expect(startAfterStartDrag(base, "f-2", 4.7)).toBe(4.5);
   });
   it("can only widen a gap that is already below the minimum", () => {
     const tight = updateFormationTiming(untimed, "f-2", { startSeconds: 2.2, holdSeconds: 3.8 });
-    expect(startSecondsForDrag(tight, "f-2", 1)).toBe(2.2);
+    expect(startAfterStartDrag(tight, "f-2", 1)).toBe(2.2);
   });
   it("rejects an unknown formation or a non-finite time", () => {
-    expect(() => startSecondsForDrag(base, "ghost", 3)).toThrow(EditError);
-    expect(() => startSecondsForDrag(base, "f-2", Number.NaN)).toThrow(EditError);
+    expect(() => startAfterStartDrag(base, "ghost", 3)).toThrow(EditError);
+    expect(() => startAfterStartDrag(base, "f-2", Number.NaN)).toThrow(EditError);
   });
 });
 
@@ -344,5 +352,24 @@ describe("setStagger", () => {
   });
   it("rejects an invalid spread", () => {
     expect(() => setStagger(base, "f-2", { order: "list-order", spread: 2 })).toThrow(EditError);
+  });
+});
+
+describe("dragFormationEdge", () => {
+  it("returns the same routine when the drag changes nothing", () => {
+    expect(dragFormationEdge(untimed, "f-1", "end", 2)).toBe(untimed);
+  });
+  it("keeps the end when the left edge moves", () => {
+    const formation = dragFormationEdge(untimed, "f-2", "start", 5).formations[1]!;
+    expect(formation.startSeconds + formation.holdSeconds).toBe(6);
+  });
+});
+
+describe("formationLabel", () => {
+  it("uses the name, or 'Formation N' when it is blank", () => {
+    expect(formationLabel(base, base.formations[0]!)).toBe("Opening");
+    expect(formationLabel(renameFormation(base, "f-2", ""), base.formations[1]!)).toBe("Diagonal");
+    const unnamed = renameFormation(base, "f-2", "");
+    expect(formationLabel(unnamed, unnamed.formations[1]!)).toBe("Formation 2");
   });
 });

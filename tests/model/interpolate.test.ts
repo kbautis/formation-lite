@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { activeFormationAt, positionsAt, smoothstep } from "../../src/model/interpolate";
+import { activeFormationAt, positionsAt, positionsInTransition, smoothstep } from "../../src/model/interpolate";
 import type { Routine } from "../../src/model/types";
 import { validRoutineInput } from "../fixtures/routines";
 
@@ -117,5 +117,14 @@ describe("positionsAt with a ripple", () => {
     const quarter = positionsAt(rippled("list-order"), 2.5)["d-1"]!;
     expect(quarter.x).toBeCloseTo(0.125);
     expect(quarter.y).toBeCloseTo(0.25);
+  });
+});
+
+describe("positionsInTransition", () => {
+  it("gives the same positions as positionsAt inside a transition", () => {
+    const [from, to] = routine.formations as [Routine["formations"][number], Routine["formations"][number]];
+    for (const seconds of [2.25, 3, 3.75]) {
+      expect(positionsInTransition(from, to, seconds, routine.dancers)).toEqual(positionsAt(routine, seconds));
+    }
   });
 });

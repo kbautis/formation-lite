@@ -45,3 +45,8 @@ export function redo(history: History): History {
 export function replacePresent(history: History, present: Routine): History {
   return { ...history, present };
 }
+
+/** Applies a change to every snapshot (past, present, future), so undo and redo never revert it. */
+export function mapHistory(history: History, change: (routine: Routine) => Routine): History {
+  return { past: history.past.map(change), present: change(history.present), future: history.future.map(change) };
+}

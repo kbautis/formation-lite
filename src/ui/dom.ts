@@ -45,3 +45,13 @@ export function requireElement<T extends Element>(parent: ParentNode, selector: 
   if (!found) throw new Error(`missing element ${selector}`);
   return found;
 }
+
+/**
+ * Positions an element on the timeline through its style object (CSSOM), never a style
+ * attribute, so the Content Security Policy needs no 'unsafe-inline' for styles.
+ */
+export function place<Element extends HTMLElement>(node: Element, leftPixels: number, widthPixels?: number): Element {
+  node.style.left = `${leftPixels}px`;
+  if (widthPixels !== undefined) node.style.width = `${widthPixels}px`;
+  return node;
+}

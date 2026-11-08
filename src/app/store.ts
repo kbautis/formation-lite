@@ -26,3 +26,24 @@ export function createStore<State extends object>(initial: State): Store<State> 
     },
   };
 }
+
+/**
+ * Renders now, then again whenever any value `select` returns changes (compared with
+ * Object.is, item by item). Each component declares what it reads in one place, so the
+ * change check can't drift from the render function.
+ */
+export function watch<State extends object>(
+  store: Store<State>,
+  select: (state: State) => readonly unknown[],
+  render: (state: State) => void,
+): void {
+  let selected = select(store.getState());
+  render(store.getState());
+  store.subscribe((next) => {
+    const nextSelected = select(next);
+    const changed = nextSelected.length !== selected.length || nextSelected.some((value, index) => !Object.is(value, selected[index]));
+    if (!changed) return;
+    selected = nextSelected;
+    render(next);
+  });
+}

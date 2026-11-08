@@ -1,6 +1,7 @@
 // Sidebar "Dancers": add, rename, recolor, remove; clicking a row selects that dancer on stage.
 import type { Controller } from "../app/controller";
-import type { AppState } from "../app/state";
+import { currentRoutine, type AppState } from "../app/state";
+import { watch } from "../app/store";
 import { addDancer, removeDancer, updateDancer } from "../model/edits";
 import { createDancer } from "../model/factory";
 import { DANCER_NAME_MAX_LENGTH, MAX_DANCERS, type Dancer } from "../model/types";
@@ -52,7 +53,7 @@ export function mountDancerPanel(root: HTMLElement, controller: Controller, newI
   };
 
   const render = (state: AppState) => {
-    const dancers = state.routine.dancers;
+    const dancers = currentRoutine(state).dancers;
     countLabel.textContent = `${dancers.length} / ${MAX_DANCERS}`;
     addButton.disabled = dancers.length >= MAX_DANCERS;
     const ids = new Set(dancers.map((dancer) => dancer.id));
@@ -74,8 +75,5 @@ export function mountDancerPanel(root: HTMLElement, controller: Controller, newI
       row.item.classList.toggle("selected", dancer.id === state.selectedDancerId);
     });
   };
-  controller.store.subscribe((next, previous) => {
-    if (next.routine.dancers !== previous.routine.dancers || next.selectedDancerId !== previous.selectedDancerId) render(next);
-  });
-  render(controller.store.getState());
+  watch(controller.store, (state) => [currentRoutine(state).dancers, state.selectedDancerId], render);
 }

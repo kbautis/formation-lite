@@ -4,18 +4,18 @@
 // - Everything here edits through model functions (setTransitionIn, setStagger) via
 //   controller.edit, so each change is one undo step and is validated like any edit.
 // - Lengths are entered in counts with a BPM and seconds without, like the hold field.
-// - Encounters come from closeEncounters (pure), only while the collision check is on;
-//   "Show" seeks to the closest moment.
+// - Encounters come from the shared per-routine cache (encountersFor), only while the
+//   collision check is on; "Show" seeks to the closest moment.
 import type { Controller } from "../app/controller";
-import type { AppState } from "../app/state";
-import { closeEncounters, type Encounter } from "../model/collisions";
+import { activeFormation, currentRoutine, type AppState } from "../app/state";
+import { watch } from "../app/store";
+import { encountersFor, type Encounter } from "../model/collisions";
 import { setStagger, setTransitionIn, transitionInSeconds } from "../model/edits";
-import { activeFormationAt } from "../model/interpolate";
 import { OPEN_STAGE_ROWS } from "../model/stage";
-import { beatsToSeconds } from "../model/tempo";
 import { formatTime } from "../model/time";
 import { STAGGER_SPREAD_DEFAULT, STAGGER_SPREAD_MAX, STAGGER_SPREAD_MIN, type Routine, type StaggerOrder } from "../model/types";
-import { el, syncInputValue } from "./dom";
+import { el } from "./dom";
+import { durationField } from "./durationField";
 import { formatDuration } from "./format";
 
 const RIPPLE_LABELS: Record<StaggerOrder | "together", string> = {
@@ -31,8 +31,7 @@ const SPREAD_STEP_PERCENT = 5;
 const DISTANCE_DECIMALS = 10;
 
 export function mountTransitionPanel(root: HTMLElement, controller: Controller): void {
-  const lengthInput = el("input", { type: "number", min: 0, inputmode: "decimal", "aria-label": "Transition in" });
-  const lengthUnit = el("span");
+  const length = durationField("Takes", "Transition in");
   const orderSelect = el(
     "select",
     { "aria-label": "Ripple order" },
@@ -50,7 +49,7 @@ export function mountTransitionPanel(root: HTMLElement, controller: Controller):
   const encounterList = el("ul", { class: "encounters" });
   const firstNote = el("p", { class: "hint" }, ["This is the first formation, so there's no transition into it."]);
   const editor = el("div", { class: "transition-fields" }, [
-    el("label", { class: "field" }, [lengthUnit, lengthInput]),
+    length.label,
     lengthHint,
     orderSelect,
     spreadField,
@@ -59,19 +58,13 @@ export function mountTransitionPanel(root: HTMLElement, controller: Controller):
   const section = el("div", { class: "transition-editor" }, [el("h3", {}, ["Transition in"]), firstNote, editor]);
   root.append(section);
 
-  const activeId = () => {
-    const state = controller.store.getState();
-    return activeFormationAt(state.routine, state.playheadSeconds)?.id ?? null;
-  };
-  const toSeconds = (value: number) => {
-    const tempo = controller.store.getState().routine.tempo;
-    return tempo ? beatsToSeconds(tempo, value) : value;
-  };
+  const activeId = () => activeFormation(controller.store.getState())?.id ?? null;
 
-  lengthInput.addEventListener("change", () => {
+  length.input.addEventListener("change", () => {
     const id = activeId();
     if (!id) return;
-    if (!controller.edit((routine) => setTransitionIn(routine, id, toSeconds(Number(lengthInput.value))))) render(controller.store.getState());
+    const seconds = length.readSeconds(controller.routine.tempo);
+    if (!controller.edit((routine) => setTransitionIn(routine, id, seconds))) render(controller.store.getState());
   });
   const applyRipple = () => {
     const id = activeId();
@@ -84,18 +77,17 @@ export function mountTransitionPanel(root: HTMLElement, controller: Controller):
   spreadInput.addEventListener("change", applyRipple);
 
   const render = (state: AppState) => {
-    const formation = activeFormationAt(state.routine, state.playheadSeconds);
+    const routine = currentRoutine(state);
+    const formation = activeFormation(state);
     section.hidden = formation === null;
     if (!formation) return;
-    const transition = transitionInSeconds(state.routine, formation.id);
+    const transition = transitionInSeconds(routine, formation.id);
     firstNote.hidden = transition !== null;
     editor.hidden = transition === null;
     if (transition === null) return;
 
-    const tempo = state.routine.tempo;
-    lengthUnit.textContent = tempo ? "Takes (counts)" : "Takes (s)";
-    lengthInput.step = tempo ? "1" : "0.25";
-    syncInputValue(lengthInput, String(tempo ? Math.round(((transition * tempo.bpm) / 60) * PERCENT) / PERCENT : Math.round(transition * PERCENT) / PERCENT));
+    const tempo = routine.tempo;
+    length.show(transition, tempo);
     lengthHint.textContent =
       transition === 0
         ? "Instant: dancers jump into place. Give them time by shortening the previous hold."
@@ -105,16 +97,11 @@ export function mountTransitionPanel(root: HTMLElement, controller: Controller):
     spreadField.hidden = formation.stagger === null;
     if (document.activeElement !== spreadInput) spreadInput.value = String(Math.round((formation.stagger?.spread ?? STAGGER_SPREAD_DEFAULT) * PERCENT));
 
-    const encounters = state.checkCollisions ? closeEncounters(state.routine, formation.id) : [];
-    renderEncounters(encounterList, encounters, state.routine, controller);
+    const encounters = state.checkCollisions ? (encountersFor(routine).get(formation.id) ?? []) : [];
+    renderEncounters(encounterList, encounters, routine, controller);
   };
 
-  controller.store.subscribe((next, previous) => {
-    if (next.routine !== previous.routine || next.playheadSeconds !== previous.playheadSeconds || next.checkCollisions !== previous.checkCollisions) {
-      render(next);
-    }
-  });
-  render(controller.store.getState());
+  watch(controller.store, (state) => [state.history.present, state.playheadSeconds, state.checkCollisions], render);
 }
 
 function renderEncounters(list: HTMLUListElement, encounters: readonly Encounter[], routine: Routine, controller: Controller): void {

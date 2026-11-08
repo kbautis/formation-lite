@@ -14,7 +14,8 @@ export function mountKeyboard(controller: Controller): void {
       event.preventDefault();
       controller.togglePlay();
     } else if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-      const { routine, playheadSeconds } = controller.store.getState();
+      const { routine } = controller;
+      const { playheadSeconds } = controller.store.getState();
       const step = routine.tempo ? beatsToSeconds(routine.tempo, 1) : STEP_SECONDS_WITHOUT_TEMPO;
       event.preventDefault();
       controller.seek(playheadSeconds + (event.key === "ArrowLeft" ? -step : step));

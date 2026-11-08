@@ -5,8 +5,9 @@
 // formation is drawn under the dots; paths of dancers who pass too close are red (if
 // the collision check is on).
 import type { Controller } from "../app/controller";
-import type { AppState } from "../app/state";
-import { closeEncounters } from "../model/collisions";
+import { currentRoutine, type AppState } from "../app/state";
+import { watch } from "../app/store";
+import { encountersFor } from "../model/collisions";
 import { activeFormationAt, positionsAt } from "../model/interpolate";
 import { SVG_STAGE_HEIGHT, gridLines, stageAspect, stageToSvg, svgToStage, toViewCoords, type ViewMode } from "../model/stage";
 import { WING_MARGIN, type Dancer, type Position } from "../model/types";
@@ -45,7 +46,7 @@ export function mountStageView(root: HTMLElement, controller: Controller): void 
     if (!matrix) throw new Error("stage is not rendered");
     const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse());
     const state = controller.store.getState();
-    return toViewCoords(svgToStage(point, stageAspect(state.routine.stage)), state.view);
+    return toViewCoords(svgToStage(point, stageAspect(currentRoutine(state).stage)), state.view);
   };
 
   const startDrag = (event: PointerEvent, dancerId: string) => {
@@ -80,16 +81,16 @@ export function mountStageView(root: HTMLElement, controller: Controller): void 
   };
 
   const renderDancers = (state: AppState) => {
-    const aspect = stageAspect(state.routine.stage);
-    const positions = positionsAt(state.routine, state.playheadSeconds);
-    const ids = new Set(state.routine.dancers.map((dancer) => dancer.id));
+    const aspect = stageAspect(currentRoutine(state).stage);
+    const positions = positionsAt(currentRoutine(state), state.playheadSeconds);
+    const ids = new Set(currentRoutine(state).dancers.map((dancer) => dancer.id));
     for (const [id, node] of dancerNodes) {
       if (!ids.has(id)) {
         node.group.remove();
         dancerNodes.delete(id);
       }
     }
-    for (const dancer of state.routine.dancers) {
+    for (const dancer of currentRoutine(state).dancers) {
       let node = dancerNodes.get(dancer.id);
       if (!node) {
         node = createDancerNode(dancer);
@@ -108,28 +109,28 @@ export function mountStageView(root: HTMLElement, controller: Controller): void 
   };
 
   const renderHint = (state: AppState) => {
-    const editable = state.canEdit && activeFormationAt(state.routine, state.playheadSeconds) !== null;
+    const editable = state.canEdit && activeFormationAt(currentRoutine(state), state.playheadSeconds) !== null;
     svg.classList.toggle("is-editable", editable);
     if (!state.canEdit) hint.textContent = "";
-    else if (state.routine.dancers.length === 0) hint.textContent = "Add dancers in the sidebar to place them on stage.";
+    else if (currentRoutine(state).dancers.length === 0) hint.textContent = "Add dancers in the sidebar to place them on stage.";
     else if (!editable && !state.isPlaying) hint.textContent = "Dancers are moving here. Click a formation on the timeline to edit positions.";
     else hint.textContent = "";
   };
 
   const renderPaths = (state: AppState) => {
-    const formation = state.canEdit && state.showPaths && !state.isPlaying ? activeFormationAt(state.routine, state.playheadSeconds) : null;
-    const index = formation ? state.routine.formations.indexOf(formation) : -1;
+    const formation = state.canEdit && state.showPaths && !state.isPlaying ? activeFormationAt(currentRoutine(state), state.playheadSeconds) : null;
+    const index = formation ? currentRoutine(state).formations.findIndex((candidate) => candidate.id === formation.id) : -1;
     if (!formation || index < 1) {
       pathLayer.replaceChildren();
       return;
     }
-    const previous = state.routine.formations[index - 1]!;
-    const encounters = state.checkCollisions ? closeEncounters(state.routine, formation.id) : [];
+    const previous = currentRoutine(state).formations[index - 1]!;
+    const encounters = state.checkCollisions ? (encountersFor(currentRoutine(state)).get(formation.id) ?? []) : [];
     const crowded = new Set(encounters.flatMap((encounter) => encounter.dancerIds));
-    const aspect = stageAspect(state.routine.stage);
+    const aspect = stageAspect(currentRoutine(state).stage);
     const toSvg = (position: Position) => stageToSvg(toViewCoords(position, state.view), aspect);
     pathLayer.replaceChildren(
-      ...state.routine.dancers.flatMap((dancer) => {
+      ...currentRoutine(state).dancers.flatMap((dancer) => {
         const from = toSvg(previous.positions[dancer.id]!);
         const to = toSvg(formation.positions[dancer.id]!);
         const className = crowded.has(dancer.id) ? "path collides" : "path";
@@ -142,7 +143,7 @@ export function mountStageView(root: HTMLElement, controller: Controller): void 
   };
 
   const render = (state: AppState) => {
-    const key = JSON.stringify([state.routine.stage, state.view]);
+    const key = JSON.stringify([currentRoutine(state).stage, state.view]);
     if (key !== gridKey) {
       gridKey = key;
       renderGrid(svg, gridLayer, state, state.view);
@@ -152,25 +153,24 @@ export function mountStageView(root: HTMLElement, controller: Controller): void 
     renderHint(state);
   };
 
-  controller.store.subscribe((next, previous) => {
-    if (
-      next.routine !== previous.routine ||
-      next.playheadSeconds !== previous.playheadSeconds ||
-      next.view !== previous.view ||
-      next.selectedDancerId !== previous.selectedDancerId ||
-      next.canEdit !== previous.canEdit ||
-      next.isPlaying !== previous.isPlaying ||
-      next.showPaths !== previous.showPaths ||
-      next.checkCollisions !== previous.checkCollisions
-    ) {
-      render(next);
-    }
-  });
-  render(controller.store.getState());
+  watch(
+    controller.store,
+    (state) => [
+      state.history.present,
+      state.playheadSeconds,
+      state.view,
+      state.selectedDancerId,
+      state.canEdit,
+      state.isPlaying,
+      state.showPaths,
+      state.checkCollisions,
+    ],
+    render,
+  );
 }
 
 function renderGrid(svg: SVGSVGElement, layer: SVGGElement, state: AppState, view: ViewMode): void {
-  const aspect = stageAspect(state.routine.stage);
+  const aspect = stageAspect(currentRoutine(state).stage);
   const width = SVG_STAGE_HEIGHT * aspect;
   const height = SVG_STAGE_HEIGHT;
   const marginX = width * WING_MARGIN;
@@ -180,10 +180,10 @@ function renderGrid(svg: SVGSVGElement, layer: SVGGElement, state: AppState, vie
     `${-marginX - VIEW_PADDING} ${-marginY - VIEW_PADDING} ${width + 2 * (marginX + VIEW_PADDING)} ${height + 2 * (marginY + VIEW_PADDING)}`,
   );
 
-  const grid = gridLines(state.routine.stage);
+  const grid = gridLines(currentRoutine(state).stage);
   const toView = (position: Position) => stageToSvg(toViewCoords(position, view), aspect);
   const downstageY = view === "audience" ? height + GRID_LABEL_OFFSET : -GRID_LABEL_OFFSET + 1;
-  const unit = state.routine.stage.size?.unit ?? "";
+  const unit = currentRoutine(state).stage.size?.unit ?? "";
 
   const nodes: SVGElement[] = [
     svgEl("rect", { class: "wings", x: -marginX, y: -marginY, width: width + 2 * marginX, height: height + 2 * marginY, rx: 2 }),

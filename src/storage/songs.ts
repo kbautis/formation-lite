@@ -22,10 +22,6 @@ export async function loadSong(database: IDBDatabase, routineId: string): Promis
   return record === undefined ? null : readStoredSong(record);
 }
 
-export async function deleteSong(database: IDBDatabase, routineId: string): Promise<void> {
-  await runRequest(database, SONGS_STORE, "readwrite", (transaction) => transaction.objectStore(SONGS_STORE).delete(routineId));
-}
-
 function readStoredSong(value: unknown): StoredSong {
   const song = value as Partial<StoredSong> | null;
   if (

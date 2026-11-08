@@ -1,39 +1,35 @@
 // Sequences every side effect in the app. See the architecture note in state.ts.
 import { EditError, RoutineFormatError } from "../model/errors";
 import {
+  addFormationAt,
+  dragFormationEdge,
   editableFormationAt,
-  holdSecondsForEnd,
   moveDancer,
   setSongInfo,
-  startSecondsForDrag,
-  updateFormationTiming,
+  touchRoutine,
+  type FormationEdge,
 } from "../model/edits";
 import { createRoutine } from "../model/factory";
-import { canRedo, canUndo, createHistory, pushHistory, redo, replacePresent, undo, type History } from "../model/history";
-import { clampToWings } from "../model/stage";
-import { fitPixelsPerSecond, timelineDurationSeconds } from "../model/timeline";
-import { touchRoutine } from "../model/edits";
-import type { Formation, Position, Routine } from "../model/types";
+import { canRedo, canUndo, createHistory, mapHistory, pushHistory, redo, replacePresent, undo, type History } from "../model/history";
+import { timelineDurationSeconds } from "../model/timeline";
+import type { Position, Routine, SongInfo } from "../model/types";
 import { downloadRoutine, readRoutineFile } from "../io/files";
 import { songDurationsMatch } from "../io/serialize";
-import { AudioClock } from "../playback/audioClock";
+import { AudioClock, type AudioLike } from "../playback/audioClock";
 import { SilentClock, type PlaybackClock } from "../playback/clock";
-import { StorageError } from "../storage/database";
+import { SongLoadCancelledError, type SongSource } from "../playback/songLoader";
+import { StorageError, isStorageFailure } from "../storage/database";
+import { readPreference, writePreference } from "../storage/preferences";
 import { deleteRoutineWithSong, listRoutines, saveRoutine } from "../storage/routines";
 import { loadSong, saveSong, type StoredSong } from "../storage/songs";
-import {
-  DEFAULT_PIXELS_PER_SECOND,
-  MAX_PIXELS_PER_SECOND,
-  MIN_PIXELS_PER_SECOND,
-  type AppState,
-  type Notice,
-} from "./state";
+import { clampZoom, currentRoutine, type AppState, type Notice } from "./state";
 import { createStore, type Store } from "./store";
 
 export const AUTOSAVE_DELAY_MILLISECONDS = 500;
 export const NOTICE_DURATION_MILLISECONDS = 5000;
-export const SONG_METADATA_TIMEOUT_MILLISECONDS = 10_000;
 export const NEW_ROUTINE_NAME = "Untitled routine";
+/** Larger than any song a routine needs (a 5-minute WAV is ~50 MB); protects device storage. */
+export const MAX_SONG_BYTES = 100 * 1024 * 1024;
 const LAST_OPENED_KEY = "formation-lite:last-opened-routine";
 const COLLISION_CHECK_OFF_KEY = "formation-lite:collision-check-off";
 const FALLBACK_AUDIO_MIME_TYPE = "audio/mpeg";
@@ -41,33 +37,24 @@ const FALLBACK_AUDIO_MIME_TYPE = "audio/mpeg";
 export interface ControllerDependencies {
   /** null when IndexedDB is unavailable (private mode, blocked storage). */
   readonly database: IDBDatabase | null;
-  readonly audio: HTMLAudioElement;
+  /** The song lifecycle (playback/songLoader.ts); its audio element is the playback clock. */
+  readonly songs: { load(song: SongSource): Promise<number>; unload(): void; readonly audio: AudioLike };
   readonly newId: () => string;
   readonly now: () => Date;
   readonly nowMilliseconds: () => number;
   readonly canEdit: boolean;
 }
 
-interface DragSession {
-  readonly formationId: string;
-  readonly dancerId: string;
-  readonly before: Routine;
-}
-
-export type FormationEdge = "start" | "end";
-
-interface EdgeDragSession {
-  readonly formationId: string;
-  readonly edge: FormationEdge;
-  readonly before: Routine;
-}
+/** One drag at a time: a dancer on the stage, or a formation's edge on the timeline. */
+type DragSession =
+  | { readonly kind: "dancer"; readonly formationId: string; readonly dancerId: string; readonly before: Routine }
+  | { readonly kind: "edge"; readonly formationId: string; readonly edge: FormationEdge; readonly before: Routine };
 
 export class Controller {
   readonly store: Store<AppState>;
   private readonly deps: ControllerDependencies;
   private clock: PlaybackClock;
   private drag: DragSession | null = null;
-  private edgeDrag: EdgeDragSession | null = null;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private noticeTimer: ReturnType<typeof setTimeout> | null = null;
   private animationFrame: number | null = null;
@@ -75,10 +62,8 @@ export class Controller {
   constructor(deps: ControllerDependencies) {
     this.deps = deps;
     this.clock = new SilentClock(deps.nowMilliseconds);
-    const routine = this.makeRoutine();
     this.store = createStore<AppState>({
-      routine,
-      history: createHistory(routine),
+      history: createHistory(this.makeRoutine()),
       savedRoutines: [],
       playheadSeconds: 0,
       isPlaying: false,
@@ -88,15 +73,19 @@ export class Controller {
       saveStatus: deps.database ? "saved" : "unavailable",
       notice: null,
       canEdit: deps.canEdit,
-      pixelsPerSecond: DEFAULT_PIXELS_PER_SECOND,
-      timelineFit: true,
+      zoom: { mode: "fit" },
       showPaths: true,
-      checkCollisions: !readFlag(COLLISION_CHECK_OFF_KEY),
+      checkCollisions: readPreference(COLLISION_CHECK_OFF_KEY) !== "true",
     });
   }
 
   private get state(): AppState {
     return this.store.getState();
+  }
+
+  /** The routine on screen. */
+  get routine(): Routine {
+    return currentRoutine(this.state);
   }
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -113,13 +102,13 @@ export class Controller {
       this.notify("error", `${listing.corrupt.length} saved routine(s) couldn't be read and were skipped.`);
     }
     this.store.setState({ savedRoutines: listing.routines });
-    const lastId = readLastOpenedId();
+    const lastId = readPreference(LAST_OPENED_KEY);
     const routine = listing.routines.find((candidate) => candidate.id === lastId) ?? listing.routines[0];
     if (routine) {
       await this.show(routine);
       return;
     }
-    writeLastOpenedId(this.state.routine.id);
+    writePreference(LAST_OPENED_KEY, this.routine.id);
     await this.saveNow();
   }
 
@@ -141,10 +130,19 @@ export class Controller {
     await this.show(routine);
   }
 
+  /** Deletes the open routine and its song from this device; on a storage failure it stays open and the user is told. */
   async deleteCurrentRoutine(): Promise<void> {
-    const { routine } = this.state;
+    const routine = this.routine;
     this.cancelPendingSave();
-    if (this.deps.database) await deleteRoutineWithSong(this.deps.database, routine.id);
+    if (this.deps.database) {
+      try {
+        await deleteRoutineWithSong(this.deps.database, routine.id);
+      } catch (error) {
+        if (!isStorageFailure(error)) throw error;
+        this.notify("error", `Couldn't delete “${routine.name}” from this device. Try again, or reload the page.`);
+        return;
+      }
+    }
     const remaining = this.state.savedRoutines.filter((candidate) => candidate.id !== routine.id);
     this.store.setState({ savedRoutines: remaining });
     if (remaining[0]) await this.show(remaining[0]);
@@ -170,7 +168,7 @@ export class Controller {
   }
 
   exportCurrentRoutine(): void {
-    downloadRoutine(touchRoutine(this.state.routine, this.deps.now()));
+    downloadRoutine(touchRoutine(this.routine, this.deps.now()));
   }
 
   // ── Edits ─────────────────────────────────────────────────────────────────
@@ -183,14 +181,19 @@ export class Controller {
     }
     let next: Routine;
     try {
-      next = change(this.state.routine);
+      next = change(this.routine);
     } catch (error) {
       if (!(error instanceof EditError)) throw error;
       this.notify("error", error.message);
       return false;
     }
-    this.commit(next, pushHistory(this.state.history, next));
+    this.commit(pushHistory(this.state.history, next));
     return true;
+  }
+
+  addFormationAtPlayhead(): boolean {
+    const seconds = this.state.playheadSeconds;
+    return this.edit((routine) => addFormationAt(routine, { id: this.deps.newId(), seconds }));
   }
 
   canUndo(): boolean {
@@ -201,46 +204,23 @@ export class Controller {
     return canRedo(this.state.history);
   }
 
+  /** Ignored mid-drag: the drag owns the present until it ends. */
   undo(): void {
-    if (this.state.canEdit && this.canUndo()) this.restore(undo(this.state.history));
+    if (this.state.canEdit && !this.drag && this.canUndo()) this.commit(undo(this.state.history));
   }
 
   redo(): void {
-    if (this.state.canEdit && this.canRedo()) this.restore(redo(this.state.history));
+    if (this.state.canEdit && !this.drag && this.canRedo()) this.commit(redo(this.state.history));
   }
 
   // ── Dragging ──────────────────────────────────────────────────────────────
 
+  /** Starts dragging a dancer in the formation held at the playhead. */
   beginDrag(dancerId: string): boolean {
-    if (!this.state.canEdit) return false;
-    try {
-      const formation = editableFormationAt(this.state.routine, this.state.playheadSeconds);
-      this.pause();
-      this.drag = { formationId: formation.id, dancerId, before: this.state.routine };
-      return true;
-    } catch (error) {
-      if (!(error instanceof EditError)) throw error;
-      this.notify("info", error.message);
-      return false;
-    }
-  }
-
-  dragTo(position: Position): void {
-    const drag = this.drag;
-    if (!drag) return;
-    const routine = moveDancer(this.state.routine, {
-      formationId: drag.formationId,
-      dancerId: drag.dancerId,
-      position: clampToWings(position),
+    return this.beginDragSession((before) => {
+      const formation = editableFormationAt(before, this.state.playheadSeconds);
+      return { kind: "dancer", formationId: formation.id, dancerId, before };
     });
-    this.store.setState({ routine });
-  }
-
-  endDrag(): void {
-    const drag = this.drag;
-    if (!drag) return;
-    this.drag = null;
-    this.finishDrag(drag.before);
   }
 
   /**
@@ -249,51 +229,69 @@ export class Controller {
    * formation so the sidebar shows it while it changes.
    */
   beginEdgeDrag(formationId: string, edge: FormationEdge): boolean {
-    if (!this.state.canEdit) return false;
-    const formation = this.state.routine.formations.find((candidate) => candidate.id === formationId);
-    if (!formation) throw new EditError(`No formation with id "${formationId}".`);
-    this.pause();
-    this.seek(formation.startSeconds);
-    this.edgeDrag = { formationId, edge, before: this.state.routine };
-    return true;
+    return this.beginDragSession((before) => {
+      const formation = before.formations.find((candidate) => candidate.id === formationId);
+      if (!formation) throw new EditError("That formation no longer exists.");
+      this.seek(formation.startSeconds);
+      return { kind: "edge", formationId, edge, before };
+    });
+  }
+
+  dragTo(position: Position): void {
+    const drag = this.drag;
+    if (drag?.kind !== "dancer") return;
+    this.updateDragged(moveDancer(this.routine, { formationId: drag.formationId, dancerId: drag.dancerId, position }));
   }
 
   dragEdgeTo(seconds: number): void {
-    const drag = this.edgeDrag;
-    if (!drag) return;
-    const routine = this.state.routine;
+    const drag = this.drag;
+    if (drag?.kind !== "edge") return;
+    const routine = dragFormationEdge(this.routine, drag.formationId, drag.edge, seconds);
+    if (routine === this.routine) return;
+    this.updateDragged(routine);
     const formation = routine.formations.find((candidate) => candidate.id === drag.formationId)!;
-    const timing = timingForEdgeDrag(routine, formation, drag.edge, seconds);
-    if (timing.startSeconds === formation.startSeconds && timing.holdSeconds === formation.holdSeconds) return;
-    this.store.setState({ routine: updateFormationTiming(routine, drag.formationId, timing) });
-    if (this.state.playheadSeconds < timing.startSeconds) this.seek(timing.startSeconds);
+    if (this.state.playheadSeconds < formation.startSeconds) this.seek(formation.startSeconds);
   }
 
-  endEdgeDrag(): void {
-    const drag = this.edgeDrag;
+  /** Ends either kind of drag, recording it as one undo step (nothing if it changed nothing). */
+  endDrag(): void {
+    const drag = this.drag;
     if (!drag) return;
-    this.edgeDrag = null;
-    this.finishDrag(drag.before);
+    this.drag = null;
+    const live = this.routine;
+    if (live === drag.before) return;
+    this.commit(pushHistory(replacePresent(this.state.history, drag.before), live));
   }
 
-  /** Records a finished drag as one undo step: from the routine before it to the routine now. */
-  private finishDrag(before: Routine): void {
-    if (this.state.routine === before) return;
-    const history = pushHistory(replacePresent(this.state.history, before), this.state.routine);
-    this.commit(this.state.routine, history);
+  private beginDragSession(start: (before: Routine) => DragSession): boolean {
+    if (!this.state.canEdit || this.drag) return false;
+    try {
+      this.pause();
+      this.drag = start(this.routine);
+      return true;
+    } catch (error) {
+      if (!(error instanceof EditError)) throw error;
+      this.notify("info", error.message);
+      return false;
+    }
+  }
+
+  /** Mid-drag the present changes in place; the undo step is pushed once, in endDrag. */
+  private updateDragged(routine: Routine): void {
+    this.store.setState({ history: replacePresent(this.state.history, routine) });
   }
 
   private cancelDrag(): void {
-    const before = this.drag?.before ?? this.edgeDrag?.before;
+    const drag = this.drag;
+    if (!drag) return;
     this.drag = null;
-    this.edgeDrag = null;
-    if (before) this.store.setState({ routine: before });
+    this.store.setState({ history: replacePresent(this.state.history, drag.before) });
   }
 
   // ── Playback ──────────────────────────────────────────────────────────────
 
   timelineDuration(): number {
-    return timelineDurationSeconds(this.state.routine);
+    return timelineDurationSeconds(this.routine);
   }
 
   togglePlay(): void {
@@ -350,77 +348,65 @@ export class Controller {
 
   // ── Song ──────────────────────────────────────────────────────────────────
 
+  /**
+   * Loads a song for the open routine. The routine is captured before the first await:
+   * if the user switches routines while the file is read or decoded, the result is
+   * dropped instead of landing on the routine they switched to.
+   */
   async loadSongFile(file: File): Promise<void> {
-    const bytes = await file.arrayBuffer();
-    const song: Omit<StoredSong, "durationSeconds"> = {
-      fileName: file.name,
-      mimeType: file.type || FALLBACK_AUDIO_MIME_TYPE,
-      bytes,
-    };
-    let durationSeconds: number;
-    try {
-      durationSeconds = await this.attachSong(song);
-    } catch {
-      this.notify("error", `This browser can't play ${file.name}. Try an MP3 or M4A file.`);
+    const routineId = this.routine.id;
+    if (file.size > MAX_SONG_BYTES) {
+      this.notify("error", `${file.name} is too large (over ${MAX_SONG_BYTES / 1024 / 1024} MB). Try an MP3 or M4A file.`);
       return;
     }
-    const routine = setSongInfo(this.state.routine, { fileName: file.name, durationSeconds });
-    this.commit(routine, replacePresent(this.state.history, routine));
-    await this.storeSong({ ...song, durationSeconds });
+    const bytes = await file.arrayBuffer();
+    if (this.routine.id !== routineId) return;
+    const mimeType = file.type || FALLBACK_AUDIO_MIME_TYPE;
+    const durationSeconds = await this.attachSong({ bytes, mimeType }, file.name, `This browser can't play ${file.name}. Try an MP3 or M4A file.`);
+    if (durationSeconds === null || this.routine.id !== routineId) return;
+    this.recordSongInfo({ fileName: file.name, durationSeconds });
+    await this.storeSong(routineId, { fileName: file.name, mimeType, durationSeconds, bytes });
   }
 
-  private async storeSong(song: StoredSong): Promise<void> {
+  /** Writes song info into every history snapshot, so undo never reverts it. Not an undo step. */
+  private recordSongInfo(song: SongInfo): void {
+    this.commit(mapHistory(this.state.history, (routine) => setSongInfo(routine, song)));
+  }
+
+  private async storeSong(routineId: string, song: StoredSong): Promise<void> {
     const database = this.deps.database;
     if (!database) return;
     try {
-      await saveSong(database, this.state.routine.id, song);
+      await saveSong(database, routineId, song);
     } catch (error) {
-      if (!(error instanceof StorageError || error instanceof DOMException)) throw error;
+      if (!isStorageFailure(error)) throw error;
       this.notify("error", "The song plays now but couldn't be saved on this device (storage may be full).");
     }
   }
 
-  /** Points the <audio> element at the song and switches to the audio clock. Resolves with the duration. */
-  private attachSong(song: Omit<StoredSong, "durationSeconds">): Promise<number> {
+  /**
+   * Loads the song into the audio element and switches to the audio clock. Returns the
+   * duration, or null when the load failed (after telling the user) or was replaced.
+   */
+  private async attachSong(source: SongSource, fileName: string, failureMessage: string): Promise<number | null> {
     this.detachSong();
-    const url = URL.createObjectURL(new Blob([song.bytes], { type: song.mimeType }));
-    const audio = this.deps.audio;
-    return new Promise<number>((resolve, reject) => {
-      const timeout = setTimeout(() => fail(), SONG_METADATA_TIMEOUT_MILLISECONDS);
-      const cleanup = () => {
-        clearTimeout(timeout);
-        audio.removeEventListener("loadedmetadata", succeed);
-        audio.removeEventListener("error", fail);
-      };
-      const succeed = () => {
-        cleanup();
-        if (!Number.isFinite(audio.duration) || audio.duration <= 0) return fail();
-        this.clock = new AudioClock(audio);
-        this.clock.seek(Math.min(this.state.playheadSeconds, audio.duration));
-        this.store.setState({ loadedSong: { url, fileName: song.fileName, durationSeconds: audio.duration } });
-        resolve(audio.duration);
-      };
-      const fail = () => {
-        cleanup();
-        audio.removeAttribute("src");
-        URL.revokeObjectURL(url);
-        reject(new Error("audio could not be decoded"));
-      };
-      audio.addEventListener("loadedmetadata", succeed);
-      audio.addEventListener("error", fail);
-      audio.src = url;
-      audio.load();
-    });
+    let durationSeconds: number;
+    try {
+      durationSeconds = await this.deps.songs.load(source);
+    } catch (error) {
+      if (!(error instanceof SongLoadCancelledError)) this.notify("error", failureMessage);
+      return null;
+    }
+    this.clock = new AudioClock(this.deps.songs.audio);
+    this.clock.seek(Math.min(this.state.playheadSeconds, durationSeconds));
+    this.store.setState({ loadedSong: { fileName, durationSeconds } });
+    return durationSeconds;
   }
 
   private detachSong(): void {
-    const loaded = this.state.loadedSong;
     if (this.state.isPlaying) this.pause();
+    this.deps.songs.unload();
     this.clock = new SilentClock(this.deps.nowMilliseconds);
-    if (!loaded) return;
-    this.deps.audio.pause();
-    this.deps.audio.removeAttribute("src");
-    URL.revokeObjectURL(loaded.url);
     this.store.setState({ loadedSong: null });
   }
 
@@ -434,7 +420,7 @@ export class Controller {
   toggleCollisionCheck(): void {
     const checkCollisions = !this.state.checkCollisions;
     this.store.setState({ checkCollisions });
-    writeFlag(COLLISION_CHECK_OFF_KEY, !checkCollisions);
+    writePreference(COLLISION_CHECK_OFF_KEY, String(!checkCollisions));
   }
 
   togglePaths(): void {
@@ -445,19 +431,13 @@ export class Controller {
     this.store.setState({ selectedDancerId: dancerId });
   }
 
-  /** Zooms by hand, which leaves fit-to-window mode. */
-  zoom(factor: number): void {
-    this.store.setState({ pixelsPerSecond: clampZoom(this.state.pixelsPerSecond * factor), timelineFit: false });
+  /** Zooms by hand from the scale currently on screen, which leaves fit-to-window mode. */
+  zoomBy(factor: number, currentPixelsPerSecond: number): void {
+    this.store.setState({ zoom: { mode: "manual", pixelsPerSecond: clampZoom(currentPixelsPerSecond * factor) } });
   }
 
-  setTimelineFit(timelineFit: boolean): void {
-    this.store.setState({ timelineFit });
-  }
-
-  /** In fit mode, zooms so the whole timeline fills widthPixels. Does nothing after a manual zoom. */
-  applyTimelineFit(widthPixels: number): void {
-    if (!this.state.timelineFit) return;
-    this.store.setState({ pixelsPerSecond: clampZoom(fitPixelsPerSecond(this.timelineDuration(), widthPixels)) });
+  zoomToFit(): void {
+    this.store.setState({ zoom: { mode: "fit" } });
   }
 
   notify(kind: Notice["kind"], text: string): void {
@@ -476,15 +456,9 @@ export class Controller {
     return createRoutine({ name: NEW_ROUTINE_NAME, now: this.deps.now(), id: this.deps.newId(), firstFormationId: this.deps.newId() });
   }
 
-  private commit(routine: Routine, history: History): void {
-    this.store.setState({ routine, history });
+  private commit(history: History): void {
+    this.store.setState({ history });
     this.scheduleSave();
-  }
-
-  private restore(history: History): void {
-    // Song info is device metadata, not an edit: keep the current one across undo/redo.
-    const routine = { ...history.present, song: this.state.routine.song };
-    this.commit(routine, replacePresent(history, routine));
   }
 
   /** Replaces everything on screen with this routine and its song from this device. */
@@ -492,30 +466,22 @@ export class Controller {
     await this.flushPendingSave();
     this.cancelDrag();
     this.detachSong();
-    this.store.setState({
-      routine,
-      history: createHistory(routine),
-      playheadSeconds: 0,
-      selectedDancerId: null,
-    });
+    this.store.setState({ history: createHistory(routine), playheadSeconds: 0, selectedDancerId: null });
     this.clock.seek(0);
-    writeLastOpenedId(routine.id);
+    writePreference(LAST_OPENED_KEY, routine.id);
     await this.restoreSong(routine);
   }
 
   private async restoreSong(routine: Routine): Promise<void> {
     const database = this.deps.database;
     const stored = database ? await loadSong(database, routine.id) : null;
+    if (this.routine.id !== routine.id) return;
     if (!stored) {
       if (routine.song) this.notify("info", `Load “${routine.song.fileName}” to hear the music with this routine.`);
       return;
     }
-    try {
-      await this.attachSong(stored);
-    } catch {
-      this.notify("error", `The saved song “${stored.fileName}” couldn't be played. Load it again.`);
-      return;
-    }
+    const durationSeconds = await this.attachSong(stored, stored.fileName, `The saved song “${stored.fileName}” couldn't be played. Load it again.`);
+    if (durationSeconds === null || this.routine.id !== routine.id) return;
     if (routine.song && !songDurationsMatch(routine.song.durationSeconds, stored.durationSeconds)) {
       this.notify("info", `Heads up: your song is a different length than the one this routine was made with (“${routine.song.fileName}”).`);
     }
@@ -543,61 +509,16 @@ export class Controller {
     const database = this.deps.database;
     if (!database) return;
     this.cancelPendingSave();
-    const saved = touchRoutine(this.state.routine, this.deps.now());
+    const saved = touchRoutine(this.routine, this.deps.now());
     try {
       await saveRoutine(database, saved);
     } catch (error) {
-      if (!(error instanceof StorageError || error instanceof DOMException)) throw error;
+      if (!isStorageFailure(error)) throw error;
       this.store.setState({ saveStatus: "failed" });
       this.notify("error", "Couldn't save on this device. Export your routine to keep your work.");
       return;
     }
     const others = this.state.savedRoutines.filter((candidate) => candidate.id !== saved.id);
     this.store.setState({ saveStatus: "saved", savedRoutines: [saved, ...others] });
-  }
-}
-
-/** New start and hold for a formation whose edge is dragged to `seconds`; the other edge stays put. */
-function timingForEdgeDrag(routine: Routine, formation: Formation, edge: FormationEdge, seconds: number) {
-  if (edge === "end") {
-    return { startSeconds: formation.startSeconds, holdSeconds: holdSecondsForEnd(routine, formation.id, seconds) };
-  }
-  const startSeconds = startSecondsForDrag(routine, formation.id, seconds);
-  return { startSeconds, holdSeconds: formation.startSeconds + formation.holdSeconds - startSeconds };
-}
-
-function clampZoom(pixelsPerSecond: number): number {
-  return Math.min(MAX_PIXELS_PER_SECOND, Math.max(MIN_PIXELS_PER_SECOND, pixelsPerSecond));
-}
-
-function readFlag(key: string): boolean {
-  try {
-    return localStorage.getItem(key) === "true";
-  } catch {
-    return false;
-  }
-}
-
-function writeFlag(key: string, value: boolean): void {
-  try {
-    localStorage.setItem(key, String(value));
-  } catch {
-    // A remembered preference is a convenience; the toggle still works this session.
-  }
-}
-
-function readLastOpenedId(): string | null {
-  try {
-    return localStorage.getItem(LAST_OPENED_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function writeLastOpenedId(id: string): void {
-  try {
-    localStorage.setItem(LAST_OPENED_KEY, id);
-  } catch {
-    // Remembering the last routine is a convenience; without it the newest routine opens.
   }
 }

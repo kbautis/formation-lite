@@ -1,7 +1,9 @@
 // Entry point: open device storage, build the layout, mount components, start the controller.
 import "./styles.css";
 import { Controller } from "./app/controller";
-import { StorageError, openDatabase } from "./storage/database";
+import { watch } from "./app/store";
+import { SongLoader } from "./playback/songLoader";
+import { isStorageFailure, openDatabase } from "./storage/database";
 import { el, requireElement } from "./ui/dom";
 import { mountDancerPanel } from "./ui/dancerPanel";
 import { mountFormationInspector } from "./ui/formationInspector";
@@ -18,13 +20,15 @@ import { mountTransport } from "./ui/transport";
 
 /** Below this width the app is a viewer: play, scrub, flip, no editing. */
 export const VIEW_ONLY_MEDIA_QUERY = "(max-width: 720px)";
+/** How long the browser gets to read a song's length before the file counts as unplayable. */
+export const SONG_METADATA_TIMEOUT_MILLISECONDS = 10_000;
 
 async function openDeviceStorage(): Promise<IDBDatabase | null> {
   if (typeof indexedDB === "undefined") return null;
   try {
     return await openDatabase(indexedDB);
   } catch (error) {
-    if (error instanceof StorageError || error instanceof DOMException) return null;
+    if (isStorageFailure(error)) return null;
     throw error;
   }
 }
@@ -47,9 +51,14 @@ async function boot(): Promise<void> {
   void requestPersistentStorage();
   const viewOnlyQuery = window.matchMedia(VIEW_ONLY_MEDIA_QUERY);
   const newId = () => crypto.randomUUID();
+  const songs = new SongLoader(audio, {
+    createObjectUrl: (blob) => URL.createObjectURL(blob),
+    revokeObjectUrl: (url) => URL.revokeObjectURL(url),
+    timeoutMilliseconds: SONG_METADATA_TIMEOUT_MILLISECONDS,
+  });
   const controller = new Controller({
     database,
-    audio,
+    songs,
     newId,
     now: () => new Date(),
     nowMilliseconds: () => performance.now(),
@@ -80,18 +89,14 @@ async function boot(): Promise<void> {
   mountSongPanel(songSection, controller);
   mountStagePanel(stageSection, controller);
   mountDancerPanel(dancerSection, controller, newId);
-  mountFormationInspector(formationSection, controller, newId);
+  mountFormationInspector(formationSection, controller);
   mountTransitionPanel(formationSection, controller);
-  mountTransport(transport, controller, newId);
+  const timelineScale = mountTimelineView(timeline, controller);
+  mountTransport(transport, controller, timelineScale);
   mountSidebarToggle(transport);
-  mountTimelineView(timeline, controller);
   mountKeyboard(controller);
 
-  const syncLayout = () => document.body.classList.toggle("view-only", !controller.store.getState().canEdit);
-  controller.store.subscribe((next, previous) => {
-    if (next.canEdit !== previous.canEdit) syncLayout();
-  });
-  syncLayout();
+  watch(controller.store, (state) => [state.canEdit], (state) => document.body.classList.toggle("view-only", !state.canEdit));
 
   const flush = () => void controller.flushPendingSave();
   window.addEventListener("pagehide", flush);

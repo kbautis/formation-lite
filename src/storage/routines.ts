@@ -3,7 +3,7 @@
 import { RoutineFormatError } from "../model/errors";
 import type { Routine } from "../model/types";
 import { parseRoutine } from "../model/validate";
-import { ROUTINES_STORE, SONGS_STORE, StorageError, runRequest } from "./database";
+import { ROUTINES_STORE, SONGS_STORE, runRequest } from "./database";
 
 export interface CorruptRecord {
   readonly id: string;
@@ -19,14 +19,6 @@ export interface RoutineListing {
 export async function saveRoutine(database: IDBDatabase, routine: Routine): Promise<void> {
   const checked = parseRoutine(routine);
   await runRequest(database, ROUTINES_STORE, "readwrite", (transaction) => transaction.objectStore(ROUTINES_STORE).put(checked));
-}
-
-export async function loadRoutine(database: IDBDatabase, id: string): Promise<Routine> {
-  const record = await runRequest<unknown>(database, ROUTINES_STORE, "readonly", (transaction) =>
-    transaction.objectStore(ROUTINES_STORE).get(id),
-  );
-  if (record === undefined) throw new StorageError(`No routine with id "${id}" on this device.`);
-  return parseRoutine(record);
 }
 
 export async function listRoutines(database: IDBDatabase): Promise<RoutineListing> {

@@ -32,13 +32,22 @@ export function positionsAt(routine: Routine, seconds: number): Record<string, P
   const nextIndex = formations.findIndex((formation) => seconds < formation.startSeconds);
   if (nextIndex === -1) return { ...formations[formations.length - 1]!.positions };
   if (nextIndex === 0) return { ...formations[0]!.positions };
-  return interpolateTransition(formations[nextIndex - 1]!, formations[nextIndex]!, seconds, routine.dancers);
+  return positionsInTransition(formations[nextIndex - 1]!, formations[nextIndex]!, seconds, routine.dancers);
 }
 
-function interpolateTransition(from: Formation, to: Formation, seconds: number, dancers: readonly Dancer[]): Record<string, Position> {
+/**
+ * Positions at `seconds`, strictly inside the transition from `from` to `to`. Callers that
+ * sample one transition many times (the collision check) pass the ripple ranks in once.
+ */
+export function positionsInTransition(
+  from: Formation,
+  to: Formation,
+  seconds: number,
+  dancers: readonly Dancer[],
+  ranks: ReadonlyMap<string, number> | null = to.stagger ? staggerRanks(to.stagger, from, dancers) : null,
+): Record<string, Position> {
   const departure = holdEnd(from);
   const progress = (seconds - departure) / (to.startSeconds - departure);
-  const ranks = to.stagger ? staggerRanks(to.stagger, from, dancers) : null;
   const result: Record<string, Position> = {};
   for (const dancer of dancers) {
     const start = from.positions[dancer.id]!;

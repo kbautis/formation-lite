@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { HISTORY_LIMIT, canRedo, canUndo, createHistory, pushHistory, redo, replacePresent, undo } from "../../src/model/history";
+import { HISTORY_LIMIT, canRedo, canUndo, createHistory, mapHistory, pushHistory, redo, replacePresent, undo } from "../../src/model/history";
 import { EditError } from "../../src/model/errors";
 import { renameRoutine } from "../../src/model/edits";
 import { validRoutineInput } from "../fixtures/routines";
@@ -54,5 +54,14 @@ describe("replacePresent", () => {
     expect(history.present.name).toBe("Third");
     expect(history.past).toHaveLength(1);
     expect(undo(history).present.name).toBe("Regionals 2027");
+  });
+});
+
+describe("mapHistory", () => {
+  it("applies a change to every snapshot, so undo never reverts it", () => {
+    const history = mapHistory(undo(pushHistory(pushHistory(createHistory(first), second), third)), (routine) => ({ ...routine, name: `${routine.name}!` }));
+    expect(history.present.name).toBe("Second!");
+    expect(history.past.map((routine) => routine.name)).toEqual(["Regionals 2027!"]);
+    expect(history.future.map((routine) => routine.name)).toEqual(["Third!"]);
   });
 });

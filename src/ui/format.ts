@@ -1,4 +1,5 @@
 // Display-only formatting shared by UI components.
+import { secondsToBeats } from "../model/tempo";
 import type { Tempo } from "../model/types";
 export function initials(name: string): string {
   const words = name.trim().split(/\s+/).filter(Boolean);
@@ -12,6 +13,6 @@ const DURATION_DECIMALS = 100;
 export function formatDuration(seconds: number, tempo: Tempo | null): string {
   if (seconds <= 0) return "instant";
   if (!tempo) return `${Math.round(seconds * 10) / 10} s`;
-  const counts = Math.round(((seconds * tempo.bpm) / 60) * DURATION_DECIMALS) / DURATION_DECIMALS;
+  const counts = Math.round(secondsToBeats(tempo, seconds) * DURATION_DECIMALS) / DURATION_DECIMALS;
   return `${counts} ${counts === 1 ? "count" : "counts"}`;
 }

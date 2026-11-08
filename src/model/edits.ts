@@ -152,12 +152,28 @@ export function moveDancer(routine: Routine, options: MoveDancerOptions): Routin
   );
 }
 
+export type FormationEdge = "start" | "end";
+
+/**
+ * Drags one edge of a formation on the timeline; the other edge stays put. "end" changes
+ * the hold, "start" changes when it starts. Snaps to the beat with a tempo and keeps a
+ * minimum transition next to the neighbor. Returns the same routine when nothing changes,
+ * so callers can skip work by identity.
+ */
+export function dragFormationEdge(routine: Routine, formationId: string, edge: FormationEdge, seconds: number): Routine {
+  const formation = requireFormation(routine, formationId);
+  const end = holdEnd(formation);
+  const startSeconds = edge === "start" ? startSecondsForDrag(routine, formation, seconds) : formation.startSeconds;
+  const holdSeconds = edge === "end" ? holdSecondsForEnd(routine, formation, seconds) : end - startSeconds;
+  if (startSeconds === formation.startSeconds && holdSeconds === formation.holdSeconds) return routine;
+  return updateFormationTiming(routine, formationId, { startSeconds, holdSeconds });
+}
+
 /**
  * The hold a formation gets when its end is dragged to endSeconds: snapped to the nearest
  * beat when there is a tempo, never negative, and never running into the next formation.
  */
-export function holdSecondsForEnd(routine: Routine, formationId: string, endSeconds: number): number {
-  const formation = requireFormation(routine, formationId);
+function holdSecondsForEnd(routine: Routine, formation: Formation, endSeconds: number): number {
   const end = snapForDrag(routine, endSeconds);
   const next = nextFormation(routine, formation);
   // Keep a minimum transition before the next formation, unless the gap is already
@@ -174,8 +190,7 @@ export function holdSecondsForEnd(routine: Routine, formationId: string, endSeco
  * keeping a minimum transition after the previous formation (unless that gap is already
  * smaller, in which case the drag may only widen it).
  */
-export function startSecondsForDrag(routine: Routine, formationId: string, startSeconds: number): number {
-  const formation = requireFormation(routine, formationId);
+function startSecondsForDrag(routine: Routine, formation: Formation, startSeconds: number): number {
   const start = snapForDrag(routine, startSeconds);
   const previous = previousFormation(routine, formation);
   const earliestStart = previous
@@ -269,8 +284,9 @@ function requireFormation(routine: Routine, formationId: string): Formation {
   return formation;
 }
 
-function formationLabel(routine: Routine, formation: Formation): string {
-  return formation.name || `Formation ${routine.formations.indexOf(formation) + 1}`;
+/** The formation's name, or "Formation N" (its position on the timeline) when it has none. */
+export function formationLabel(routine: Routine, formation: Formation): string {
+  return formation.name || `Formation ${routine.formations.findIndex((candidate) => candidate.id === formation.id) + 1}`;
 }
 
 function validated(routine: Routine, friendlyMessage?: string): Routine {

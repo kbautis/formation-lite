@@ -24,6 +24,10 @@ export function beatsToSeconds(tempo: Tempo, beats: number): number {
   return (beats * 60) / tempo.bpm;
 }
 
+export function secondsToBeats(tempo: Tempo, seconds: number): number {
+  return (seconds * tempo.bpm) / 60;
+}
+
 export function countAt(tempo: Tempo, seconds: number): Count | null {
   const beat = Math.floor(beatAt(tempo, seconds) + BEAT_TOLERANCE);
   if (beat < 0) return null;

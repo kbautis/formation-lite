@@ -1,15 +1,16 @@
 // Transport bar: play/pause, time and count readout, add formation, flip view, paths and
 // collision toggles, undo/redo, zoom.
 import type { Controller } from "../app/controller";
-import type { AppState } from "../app/state";
-import { addFormationAt } from "../model/edits";
+import { currentRoutine, type AppState } from "../app/state";
+import { watch } from "../app/store";
+import type { TimelineScale } from "./timelineView";
 import { countLabelAt } from "../model/tempo";
 import { formatTime } from "../model/time";
 import { el } from "./dom";
 
 const ZOOM_STEP = 1.5;
 
-export function mountTransport(root: HTMLElement, controller: Controller, newId: () => string): void {
+export function mountTransport(root: HTMLElement, controller: Controller, timeline: TimelineScale): void {
   const playButton = el("button", { type: "button", class: "play-button primary" });
   const time = el("span", { class: "time-readout" });
   const count = el("span", { class: "count-readout" });
@@ -41,33 +42,34 @@ export function mountTransport(root: HTMLElement, controller: Controller, newId:
   );
 
   playButton.addEventListener("click", () => controller.togglePlay());
-  addButton.addEventListener("click", () => {
-    const seconds = controller.store.getState().playheadSeconds;
-    controller.edit((routine) => addFormationAt(routine, { id: newId(), seconds }));
-  });
+  addButton.addEventListener("click", () => controller.addFormationAtPlayhead());
   flipButton.addEventListener("click", () => controller.toggleView());
   pathsButton.addEventListener("click", () => controller.togglePaths());
   collisionsButton.addEventListener("click", () => controller.toggleCollisionCheck());
   undoButton.addEventListener("click", () => controller.undo());
   redoButton.addEventListener("click", () => controller.redo());
-  zoomOut.addEventListener("click", () => controller.zoom(1 / ZOOM_STEP));
-  zoomIn.addEventListener("click", () => controller.zoom(ZOOM_STEP));
-  zoomFit.addEventListener("click", () => controller.setTimelineFit(true));
+  zoomOut.addEventListener("click", () => controller.zoomBy(1 / ZOOM_STEP, timeline.pixelsPerSecond()));
+  zoomIn.addEventListener("click", () => controller.zoomBy(ZOOM_STEP, timeline.pixelsPerSecond()));
+  zoomFit.addEventListener("click", () => controller.zoomToFit());
 
   const render = (state: AppState) => {
     playButton.textContent = state.isPlaying ? "Pause" : "Play";
     playButton.setAttribute("aria-label", state.isPlaying ? "Pause" : "Play");
     time.textContent = formatTime(state.playheadSeconds);
-    count.textContent = state.routine.tempo ? countLabelAt(state.routine.tempo, state.playheadSeconds) : "";
+    const { tempo } = currentRoutine(state);
+    count.textContent = tempo ? countLabelAt(tempo, state.playheadSeconds) : "";
     flipButton.textContent = state.view === "audience" ? "Audience view" : "Dancer view";
     flipButton.setAttribute("aria-pressed", String(state.view === "dancer"));
     flipButton.title = "Flip between the audience's view and the dancers' view";
     undoButton.disabled = !controller.canUndo();
     redoButton.disabled = !controller.canRedo();
-    zoomFit.setAttribute("aria-pressed", String(state.timelineFit));
+    zoomFit.setAttribute("aria-pressed", String(state.zoom.mode === "fit"));
     pathsButton.setAttribute("aria-pressed", String(state.showPaths));
     collisionsButton.setAttribute("aria-pressed", String(state.checkCollisions));
   };
-  controller.store.subscribe(render);
-  render(controller.store.getState());
+  watch(
+    controller.store,
+    (state) => [state.isPlaying, state.playheadSeconds, state.history, state.view, state.zoom, state.showPaths, state.checkCollisions],
+    render,
+  );
 }

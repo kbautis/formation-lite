@@ -1,6 +1,7 @@
 // Sidebar "Stage": open stage by default; optionally a real width × depth that rescales the grid.
 import type { Controller } from "../app/controller";
-import type { AppState } from "../app/state";
+import { currentRoutine, type AppState } from "../app/state";
+import { watch } from "../app/store";
 import { setStageSize } from "../model/edits";
 import { STAGE_DIMENSION_MAX, type LengthUnit, type StageSize } from "../model/types";
 import { el, syncInputValue } from "./dom";
@@ -32,7 +33,7 @@ export function mountStagePanel(root: HTMLElement, controller: Controller): void
   unitSelect.addEventListener("change", applyFields);
 
   const render = (state: AppState) => {
-    const size = state.routine.stage.size;
+    const size = currentRoutine(state).stage.size;
     sizedToggle.checked = size !== null;
     sizeFields.hidden = size === null;
     if (size) {
@@ -41,8 +42,5 @@ export function mountStagePanel(root: HTMLElement, controller: Controller): void
       unitSelect.value = size.unit;
     }
   };
-  controller.store.subscribe((next, previous) => {
-    if (next.routine.stage !== previous.routine.stage) render(next);
-  });
-  render(controller.store.getState());
+  watch(controller.store, (state) => [currentRoutine(state).stage.size], render);
 }

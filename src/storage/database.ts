@@ -23,6 +23,11 @@ export class StorageError extends Error {
   }
 }
 
+/** Errors that mean "device storage failed" (as opposed to a bug): ours, or the browser's. */
+export function isStorageFailure(error: unknown): error is StorageError | DOMException {
+  return error instanceof StorageError || error instanceof DOMException;
+}
+
 export function openDatabase(factory: IDBFactory): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const request = factory.open(DATABASE_NAME, DATABASE_VERSION);
