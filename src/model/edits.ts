@@ -12,11 +12,14 @@ import { EditError, RoutineFormatError } from "./errors";
 import { activeFormationAt, holdEnd, positionsAt } from "./interpolate";
 import { clampToWings } from "./stage";
 import { beatsToSeconds, snapToBeat } from "./tempo";
-import { MAX_DANCERS, type Dancer, type Formation, type Position, type Routine, type SongInfo, type StageSize, type Tempo } from "./types";
+import { MAX_DANCERS, type Dancer, type Formation, type Position, type Routine, type SongInfo, type StageSize, type Stagger, type Tempo } from "./types";
 import { parseRoutine } from "./validate";
 
 export const DEFAULT_HOLD_SECONDS = 2;
 export const DEFAULT_HOLD_BEATS = 4;
+/** Edge drags and new formations always leave this much time for dancers to move. */
+export const MIN_TRANSITION_BEATS = 1;
+export const MIN_TRANSITION_SECONDS = 0.5;
 
 const DEFAULT_SPOT_COLUMNS = 5;
 const DEFAULT_SPOT_ROWS = 4;
@@ -99,7 +102,7 @@ export function addFormationAt(routine: Routine, options: AddFormationOptions): 
     id: options.id,
     name: `Formation ${routine.formations.length + 1}`,
     startSeconds,
-    holdSeconds: next ? Math.min(defaultHold, next.startSeconds - startSeconds) : defaultHold,
+    holdSeconds: next ? Math.min(defaultHold, Math.max(0, next.startSeconds - startSeconds - minimumTransitionSeconds(routine))) : defaultHold,
     stagger: null,
     positions: positionsAt(routine, startSeconds),
   };
@@ -155,11 +158,77 @@ export function moveDancer(routine: Routine, options: MoveDancerOptions): Routin
  */
 export function holdSecondsForEnd(routine: Routine, formationId: string, endSeconds: number): number {
   const formation = requireFormation(routine, formationId);
-  if (!Number.isFinite(endSeconds)) throw new EditError("A formation's end must be a time in the song.");
-  const end = routine.tempo ? snapToBeat(routine.tempo, endSeconds) : endSeconds;
-  const next = routine.formations.find((candidate) => candidate.startSeconds > formation.startSeconds);
-  const longestHold = next ? next.startSeconds - formation.startSeconds : Number.POSITIVE_INFINITY;
-  return Math.min(longestHold, Math.max(0, end - formation.startSeconds));
+  const end = snapForDrag(routine, endSeconds);
+  const next = nextFormation(routine, formation);
+  // Keep a minimum transition before the next formation, unless the gap is already
+  // smaller (typed in the sidebar): then the drag may only shrink the hold.
+  const latestEnd = next
+    ? Math.max(next.startSeconds - minimumTransitionSeconds(routine), Math.min(holdEnd(formation), next.startSeconds))
+    : Number.POSITIVE_INFINITY;
+  return Math.max(0, Math.min(latestEnd, end) - formation.startSeconds);
+}
+
+/**
+ * The start a formation gets when its left edge is dragged to startSeconds; its end stays
+ * put. Snapped to the beat with a tempo, never after its own end, never before 0, and
+ * keeping a minimum transition after the previous formation (unless that gap is already
+ * smaller, in which case the drag may only widen it).
+ */
+export function startSecondsForDrag(routine: Routine, formationId: string, startSeconds: number): number {
+  const formation = requireFormation(routine, formationId);
+  const start = snapForDrag(routine, startSeconds);
+  const previous = previousFormation(routine, formation);
+  const earliestStart = previous
+    ? Math.min(holdEnd(previous) + minimumTransitionSeconds(routine), formation.startSeconds)
+    : 0;
+  return Math.min(holdEnd(formation), Math.max(earliestStart, start));
+}
+
+export function minimumTransitionSeconds(routine: Routine): number {
+  return routine.tempo ? beatsToSeconds(routine.tempo, MIN_TRANSITION_BEATS) : MIN_TRANSITION_SECONDS;
+}
+
+/** Time dancers have to move into this formation; null for the first formation. */
+export function transitionInSeconds(routine: Routine, formationId: string): number | null {
+  const formation = requireFormation(routine, formationId);
+  const previous = previousFormation(routine, formation);
+  return previous ? formation.startSeconds - holdEnd(previous) : null;
+}
+
+/**
+ * Sets how long dancers take to move into this formation by changing when the previous
+ * formation releases. This formation's start, which is pinned to the music, never moves.
+ */
+export function setTransitionIn(routine: Routine, formationId: string, seconds: number): Routine {
+  const formation = requireFormation(routine, formationId);
+  const previous = previousFormation(routine, formation);
+  if (!previous) throw new EditError("The first formation has no transition into it.");
+  if (!Number.isFinite(seconds) || seconds < 0) throw new EditError("A transition can't be negative.");
+  const previousHold = formation.startSeconds - seconds - previous.startSeconds;
+  if (previousHold < 0) {
+    throw new EditError("That's longer than the time since the previous formation started. Move this formation later first.");
+  }
+  return updateFormationTiming(routine, previous.id, { startSeconds: previous.startSeconds, holdSeconds: previousHold });
+}
+
+/** Sets the ripple for the transition into this formation (null = everyone moves together). */
+export function setStagger(routine: Routine, formationId: string, stagger: Stagger | null): Routine {
+  requireFormation(routine, formationId);
+  return validated(replaceFormation(routine, formationId, (formation) => ({ ...formation, stagger })));
+}
+
+function snapForDrag(routine: Routine, seconds: number): number {
+  if (!Number.isFinite(seconds)) throw new EditError("A formation's edge must be a time in the song.");
+  return routine.tempo ? snapToBeat(routine.tempo, seconds) : seconds;
+}
+
+function previousFormation(routine: Routine, formation: Formation): Formation | null {
+  const index = routine.formations.indexOf(formation);
+  return index > 0 ? routine.formations[index - 1]! : null;
+}
+
+function nextFormation(routine: Routine, formation: Formation): Formation | null {
+  return routine.formations[routine.formations.indexOf(formation) + 1] ?? null;
 }
 
 /** The formation a drag at this moment edits; throws when the playhead is mid-transition. */

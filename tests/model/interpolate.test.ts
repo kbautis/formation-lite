@@ -82,3 +82,40 @@ describe("positionsAt", () => {
     expect(Object.keys(positionsAt(routine, 3)).sort()).toEqual(["d-1", "d-2"]);
   });
 });
+
+describe("positionsAt with a ripple", () => {
+  // Transition 2–4 s into f-2. In f-1, d-1 stands left (x 0.25) and d-2 right (x 0.75), same depth.
+  function rippled(order: "left-to-right" | "right-to-left" | "front-to-back" | "list-order", spread = 0.5): Routine {
+    return withFormations([routine.formations[0]!, { ...routine.formations[1]!, stagger: { order, spread } }]);
+  }
+
+  it("moves the first dancer in the order while the last has not left yet", () => {
+    const atMiddle = positionsAt(rippled("left-to-right"), 3);
+    expect(atMiddle["d-1"]).toEqual({ x: 0, y: 0 });
+    expect(atMiddle["d-2"]).toEqual({ x: 0.75, y: 0.5 });
+  });
+
+  it("reverses with right to left", () => {
+    const atMiddle = positionsAt(rippled("right-to-left"), 3);
+    expect(atMiddle["d-2"]).toEqual({ x: 1, y: 1 });
+    expect(atMiddle["d-1"]).toEqual({ x: 0.25, y: 0.5 });
+  });
+
+  it("breaks ties in position by list order", () => {
+    // Same depth, so front to back falls back to list order: d-1 first.
+    expect(positionsAt(rippled("front-to-back"), 3)["d-1"]).toEqual({ x: 0, y: 0 });
+  });
+
+  it("still has everyone in place at both ends of the transition", () => {
+    const ripple = rippled("left-to-right", 0.9);
+    expect(positionsAt(ripple, 2)).toEqual(routine.formations[0]!.positions);
+    expect(positionsAt(ripple, 4)).toEqual(routine.formations[1]!.positions);
+  });
+
+  it("eases each dancer inside their own slice of the transition", () => {
+    // d-1 moves during the first half (2–3 s); at 2.5 s it is halfway along its slice.
+    const quarter = positionsAt(rippled("list-order"), 2.5)["d-1"]!;
+    expect(quarter.x).toBeCloseTo(0.125);
+    expect(quarter.y).toBeCloseTo(0.25);
+  });
+});
