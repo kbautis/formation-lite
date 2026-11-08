@@ -3,18 +3,25 @@
 // with names trimmed, or throws RoutineFormatError naming the first bad field path.
 // It reads every supported version and always returns the current one: a version 1
 // document migrates by giving each formation stagger: null.
+// Share files come from other people, so ids must match ID_PATTERN (which rules out
+// "__proto__"), positions are read with Object.hasOwn into a prototype-free object, and
+// list sizes are capped so a crafted file can't make the app unusable.
 import { RoutineFormatError } from "./errors";
 import {
   BPM_MAX,
   BPM_MIN,
   DANCER_NAME_MAX_LENGTH,
   FORMATION_NAME_MAX_LENGTH,
+  ID_MAX_LENGTH,
+  ID_PATTERN,
   MAX_DANCERS,
+  MAX_FORMATIONS,
   POSITION_MAX,
   POSITION_MIN,
   ROUTINE_FORMAT,
   ROUTINE_NAME_MAX_LENGTH,
   ROUTINE_VERSION,
+  SONG_FILE_NAME_MAX_LENGTH,
   STAGE_DIMENSION_MAX,
   STAGGER_ORDERS,
   STAGGER_SPREAD_MAX,
@@ -54,7 +61,7 @@ export function parseRoutine(input: unknown): Routine {
   return {
     format: ROUTINE_FORMAT,
     version: ROUTINE_VERSION,
-    id: readNonEmptyString(routine.id, "id"),
+    id: readId(routine.id, "id"),
     name: readName(routine.name, "name", 1, ROUTINE_NAME_MAX_LENGTH),
     createdAt: readTimestamp(routine.createdAt, "createdAt"),
     updatedAt: readTimestamp(routine.updatedAt, "updatedAt"),
@@ -96,7 +103,11 @@ function readSong(value: unknown): SongInfo | null {
   const song = readObject(value, "song");
   const durationSeconds = readFiniteNumber(song.durationSeconds, "song.durationSeconds");
   if (durationSeconds <= 0) throw new RoutineFormatError("song.durationSeconds", "must be greater than 0");
-  return { fileName: readNonEmptyString(song.fileName, "song.fileName"), durationSeconds };
+  const fileName = readNonEmptyString(song.fileName, "song.fileName");
+  if (fileName.length > SONG_FILE_NAME_MAX_LENGTH) {
+    throw new RoutineFormatError("song.fileName", `must be at most ${SONG_FILE_NAME_MAX_LENGTH} characters`);
+  }
+  return { fileName, durationSeconds };
 }
 
 function readTempo(value: unknown): Tempo | null {
@@ -128,6 +139,7 @@ function readDancers(value: unknown): Dancer[] {
 function readFormations(value: unknown, dancers: readonly Dancer[], sourceVersion: number): Formation[] {
   const list = readArray(value, "formations");
   if (list.length === 0) throw new RoutineFormatError("formations", "at least one formation is required");
+  if (list.length > MAX_FORMATIONS) throw new RoutineFormatError("formations", `at most ${MAX_FORMATIONS} formations`);
   const seenIds = new Set<string>();
   const formations = list.map((item, index) => readFormation(item, `formations[${index}]`, dancers, seenIds, sourceVersion));
   assertFormationsOrdered(formations);
@@ -189,10 +201,10 @@ function readPositions(value: unknown, path: string, dancers: readonly Dancer[])
   for (const key of Object.keys(positions)) {
     if (!dancerIds.has(key)) throw new RoutineFormatError(`${path}.${key}`, "position for an unknown dancer");
   }
-  const result: Record<string, Position> = {};
+  const result: Record<string, Position> = Object.create(null);
   for (const dancer of dancers) {
     const positionPath = `${path}.${dancer.id}`;
-    if (!(dancer.id in positions)) throw new RoutineFormatError(positionPath, "missing position for this dancer");
+    if (!Object.hasOwn(positions, dancer.id)) throw new RoutineFormatError(positionPath, "missing position for this dancer");
     const position = readObject(positions[dancer.id], positionPath);
     result[dancer.id] = {
       x: readCoordinate(position.x, `${positionPath}.x`),
@@ -211,10 +223,17 @@ function readCoordinate(value: unknown, path: string): number {
 }
 
 function readUniqueId(value: unknown, path: string, seenIds: Set<string>): string {
-  const id = readNonEmptyString(value, path);
+  const id = readId(value, path);
   if (seenIds.has(id)) throw new RoutineFormatError(path, `duplicate id "${id}"`);
   seenIds.add(id);
   return id;
+}
+
+function readId(value: unknown, path: string): string {
+  if (typeof value !== "string" || !ID_PATTERN.test(value)) {
+    throw new RoutineFormatError(path, `expected an id of letters, digits, "-" or "_" (at most ${ID_MAX_LENGTH}, starting with a letter or digit)`);
+  }
+  return value;
 }
 
 function readName(value: unknown, path: string, minLength: number, maxLength: number): string {

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import { parseRoutine } from "../../src/model/validate";
 import { RoutineFormatError } from "../../src/model/errors";
 import { validRoutineInput } from "../fixtures/routines";
+import { parseRoutineFile } from "../../src/io/serialize";
+import { ID_MAX_LENGTH, MAX_FORMATIONS, SONG_FILE_NAME_MAX_LENGTH } from "../../src/model/types";
 
 // Applies a mutation to a fresh valid routine and returns it as untyped input.
 function mutated(mutate: (routine: any) => void): unknown {
@@ -243,6 +245,59 @@ describe("parseRoutine", () => {
     it("rejects a spread outside 0.1–0.9", () => {
       expectRejected(mutated((r) => (r.formations[1].stagger = { order: "list-order", spread: 0.05 })), "formations[1].stagger.spread");
       expectRejected(mutated((r) => (r.formations[1].stagger = { order: "list-order", spread: 0.95 })), "formations[1].stagger.spread");
+    });
+  });
+
+  describe("crafted share files", () => {
+    // JSON.parse makes "__proto__" an own key, exactly as in a file someone sends you.
+    function craftedFile(mutate: (routine: any) => void): string {
+      const routine: any = validRoutineInput();
+      mutate(routine);
+      return JSON.stringify(routine).replaceAll('"d-1"', '"__proto__"');
+    }
+
+    it("rejects a dancer id of __proto__ instead of corrupting the routine", () => {
+      try {
+        parseRoutineFile(craftedFile(() => {}));
+        throw new Error("expected a rejection");
+      } catch (error) {
+        expect(error).toBeInstanceOf(RoutineFormatError);
+        expect((error as RoutineFormatError).path).toBe("dancers[0].id");
+      }
+    });
+
+    it("does not let an inherited name like constructor pass as a stored position", () => {
+      expectRejected(
+        mutated((r) => {
+          r.dancers[0].id = "constructor";
+          for (const formation of r.formations) delete formation.positions["d-1"];
+        }),
+        "formations[0].positions.constructor",
+      );
+    });
+
+    it("rejects ids with unexpected characters or over the length limit", () => {
+      expectRejected(mutated((r) => (r.id = "has space")), "id");
+      expectRejected(mutated((r) => (r.formations[0].id = "x".repeat(ID_MAX_LENGTH + 1))), "formations[0].id");
+      expectRejected(mutated((r) => (r.dancers[0].id = "-leading-dash")), "dancers[0].id");
+    });
+
+    it("accepts the UUIDs the app generates", () => {
+      expect(parseRoutine(mutated((r) => (r.id = "6f1c0a3e-2b8f-4c1e-9d2a-5b7e8f0a1c2d"))).id).toBe("6f1c0a3e-2b8f-4c1e-9d2a-5b7e8f0a1c2d");
+    });
+
+    it(`rejects more than ${MAX_FORMATIONS} formations`, () => {
+      expectRejected(
+        mutated((r) => {
+          const template = r.formations[0];
+          r.formations = Array.from({ length: MAX_FORMATIONS + 1 }, (_, i) => ({ ...template, id: `f${i}`, startSeconds: i * 3 }));
+        }),
+        "formations",
+      );
+    });
+
+    it("rejects an over-long song file name", () => {
+      expectRejected(mutated((r) => (r.song.fileName = "x".repeat(SONG_FILE_NAME_MAX_LENGTH + 1))), "song.fileName");
     });
   });
 });

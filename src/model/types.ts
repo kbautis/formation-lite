@@ -17,6 +17,12 @@ export const ROUTINE_NAME_MAX_LENGTH = 80;
 export const DANCER_NAME_MAX_LENGTH = 40;
 export const FORMATION_NAME_MAX_LENGTH = 40;
 export const MAX_DANCERS = 40;
+/** Far beyond any real routine; bounds the work a crafted share file can cause. */
+export const MAX_FORMATIONS = 500;
+/** Ids are generated UUIDs; the pattern also rules out names like __proto__. */
+export const ID_MAX_LENGTH = 64;
+export const ID_PATTERN = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/;
+export const SONG_FILE_NAME_MAX_LENGTH = 255;
 export const STAGE_DIMENSION_MAX = 500;
 export const BPM_MIN = 40;
 export const BPM_MAX = 300;
