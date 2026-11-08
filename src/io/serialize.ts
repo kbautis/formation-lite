@@ -1,4 +1,7 @@
-// The share-file contract (docs/architecture.md §4.1, §4.5). Pure: no DOM.
+// Architecture note (Task 6 — sharing)
+// - This file is the share-file contract (docs/architecture.md §4.1, §4.5): JSON of a
+//   validated routine, read back only through parseRoutine. Pure: no DOM.
+// - io/files.ts is the thin browser glue around it (download, read a picked file).
 import { RoutineFormatError } from "../model/errors";
 import type { Routine } from "../model/types";
 import { parseRoutine } from "../model/validate";

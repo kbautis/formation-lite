@@ -95,6 +95,12 @@ function watchErrors(page, label) {
 async function openApp(context, label) {
   const page = await context.newPage();
   watchErrors(page, label);
+  // Record every Content Security Policy violation; any one fails the run.
+  await page.addInitScript(() => {
+    document.addEventListener("securitypolicyviolation", (event) => {
+      console.error(`CSP violation: ${event.violatedDirective} blocked ${event.blockedURI}`);
+    });
+  });
   await page.goto(BASE_URL);
   await page.waitForSelector("body[data-ready='true']");
   return page;
@@ -152,6 +158,9 @@ async function main() {
     const desktop = await browser.newContext({ viewport: { width: 1280, height: 800 }, acceptDownloads: true });
     const page = await openApp(desktop, "desktop");
     check((await page.locator(".routine-picker option").count()) === 1, "fresh device starts with exactly one routine");
+    const policyTag = page.locator("meta[http-equiv='Content-Security-Policy']");
+    const policy = (await policyTag.count()) > 0 ? await policyTag.getAttribute("content") : null;
+    check(policy !== null && !policy.includes("unsafe-inline"), "the built site sets a Content Security Policy without 'unsafe-inline'");
 
     await page.fill(".routine-name", "Smoke Regionals");
     await page.press(".routine-name", "Enter");

@@ -1,12 +1,11 @@
-// Architecture note (Task 6 — playback and sharing)
+// Architecture note (Task 6 — playback clocks)
 // - PlaybackClock is the only source of "now" for playback. The controller asks
 //   currentTime() every animation frame and renders positionsAt(routine, t); nothing
 //   accumulates frame durations, so playback cannot drift from the music.
 // - AudioClock (song loaded) reads HTMLAudioElement.currentTime; SilentClock (no song)
 //   reads an injected millisecond time source (performance.now in the app).
 // - Neither clock knows the timeline length; the controller stops playback at the end.
-// - io/serialize.ts is the share-file contract: JSON of a validated routine, read back
-//   only through parseRoutine. io/files.ts is the thin browser glue around it.
+// - The song itself (object URL, loading, cancelling) is playback/songLoader.ts.
 
 export interface PlaybackClock {
   currentTime(): number;

@@ -47,14 +47,21 @@ valid routine is, how an edit changes it, and where dancers are at a given secon
 where nearly all tests live.
 
 The **store** (`src/app/store.ts`) is a tiny observable holding the one `AppState`. UI
-components read from it and dispatch edits. Edits go through the model's edit functions
-and the undo history, and every change to `routine` triggers a debounced autosave.
+components subscribe with `watch(store, select, render)`, which re-renders only when a
+value they declared changes, and dispatch edits through the controller. The routine on
+screen *is* `history.present` (there is no second copy): edits push onto the history,
+drags update the present in place and push one step when they end, and every change
+triggers a debounced autosave. Song info is written into every history snapshot when a
+song loads, so undo never reverts it.
 
 **Storage** (`src/storage/`) is the only code that touches IndexedDB. It exposes
 `saveRoutine`, `loadRoutine`, `listRoutines`, `deleteRoutineWithSong`, `saveSong`, `loadSong`
 and `deleteSong`. Swapping the store underneath later changes this folder only.
 
-**Playback** (`src/playback/`) provides one `PlaybackClock` interface with two
+**Playback** (`src/playback/`) owns the song and the clock. `SongLoader` manages the
+`<audio>` element's source: one load at a time, and starting another load or switching
+routines cancels the pending one, so a slow load can never attach to a routine the user
+has left. It provides one `PlaybackClock` interface with two
 implementations: `AudioClock` (wraps an `<audio>` element and is the clock when a song
 is loaded) and `SilentClock` (wraps `performance.now()`, used when there is no song).
 The UI never reads time from anywhere else.
@@ -180,6 +187,11 @@ starting; it is not stored separately, so the time model above is unchanged. Wha
   while both its start and end distances are not. Sampling can miss a pass that is
   shorter than one sample interval; 48 samples per transition keep that window under
   ~0.1 s for transitions up to ~5 s.
+- **Caching.** `encountersFor(routine)` is cached per routine object, so the stage,
+  timeline and sidebar share one computation; underneath, each transition's result is
+  cached by its content (timing, ripple, positions, dancers, stage), because every edit
+  rebuilds the routine through `parseRoutine`. Dragging a dancer recomputes only the two
+  transitions next to the edited formation.
 
 ### 4.4 Device storage (IndexedDB)
 
@@ -226,8 +238,11 @@ edge calls `beginEdgeDrag(id, "start" | "end")` / `dragEdgeTo` / `endEdgeDrag`. 
 computes the new timing with `holdSecondsForEnd` or `startSecondsForDrag` (snapped to the
 beat with a tempo, leaving a minimum transition, §4.3.1) and updates the routine live;
 pointer-up records one undo step,
-the same pattern as dragging a dancer. The zoom is frozen during the drag so a timeline
-that grows with the last hold does not rezoom under the pointer.
+the same pattern as dragging a dancer; only one drag (dancer or edge) can be active, and
+undo is ignored until it ends. The edge rule itself is `dragFormationEdge` in the model.
+Zoom is stored as the user's choice (`fit`, or a manual px/s); the timeline derives the
+fitted scale from its own measured width, and freezes the timeline length used for it
+while an edge is dragged, so the scale does not change under the pointer.
 
 **Playback (W6).** Pressing play calls `clock.play()`. Each animation frame reads
 `clock.currentTime()`, sets `state.playhead`, and `stageView` calls
@@ -287,7 +302,7 @@ canvas, the easing curve, the hosting provider, and the phone breakpoint.
 |---|---|---|---|
 | IndexedDB (private mode, quota, Safari eviction) | App still works for the session. A banner says "Not saving on this device — export to keep your work". | Writes are debounced and async; editing never waits on them. | Every load goes through `validate`. A corrupt record is reported by name and skipped, never half-rendered. |
 | Song decode (unsupported codec) | The routine opens on the silent clock with a message naming the file. | N/A. | Duration mismatch on import shows a warning (§4.5). |
-| Imported file | N/A. | N/A. | Rejected with the validator's field-level message. Nothing is written until validation passes. |
+| Imported file | N/A. | N/A. | Rejected with the validator's field-level message. Nothing is written until validation passes. Ids must match a safe pattern (no `__proto__`), positions are read with `Object.hasOwn`, and at most 500 formations are accepted, so a crafted file can neither corrupt a routine nor freeze the app. |
 | Audio clock drift | N/A. | N/A. | Positions are always computed from `audio.currentTime`, never accumulated frame by frame, so there is no drift to accumulate. |
 
 Safari can delete site storage after a period without use (its tracking-prevention

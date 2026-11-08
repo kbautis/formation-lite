@@ -35,7 +35,7 @@ formation-lite/
 ├── index.html                    # app shell
 ├── package.json                  # scripts: dev, build, test, typecheck, smoke
 ├── tsconfig.json                 # strict TS config
-├── vite.config.ts                # relative base path for Pages; Vitest config
+├── vite.config.ts                # relative base path for Pages; build-time Content Security Policy; Vitest config
 ├── .github/workflows/deploy.yml  # typecheck + test + build + publish to Pages
 ├── scripts/
 │   └── smoke.mjs                 # Playwright smoke test against the built site
@@ -49,31 +49,34 @@ formation-lite/
 │   │   ├── errors.ts             # RoutineFormatError, EditError
 │   │   ├── validate.ts           # parseRoutine(unknown) → Routine, throws field-level errors
 │   │   ├── interpolate.ts        # positionsAt(routine, t), activeFormationAt(routine, t)
-│   │   ├── tempo.ts              # beatAt, countLabelAt, snapToBeat, beatsToSeconds, beatTimesBetween
+│   │   ├── tempo.ts              # beatAt, countLabelAt, snapToBeat, beatsToSeconds, secondsToBeats, beatTimesBetween
 │   │   ├── time.ts               # formatTime (m:ss.t)
 │   │   ├── stage.ts              # stageAspect, gridStep, gridLines, toViewCoords (flip), SVG mapping, clampToWings
 │   │   ├── timeline.ts           # timelineDurationSeconds, rulerStepSeconds, fitPixelsPerSecond, countLabelEvery
-│   │   ├── edits.ts              # immutable edit functions on Routine (incl. edge drags, Transition in, ripple)
-│   │   ├── collisions.ts         # closeEncounters, encountersByFormation (dancers passing too close)
+│   │   ├── edits.ts              # immutable edits (incl. dragFormationEdge, Transition in, ripple), formationLabel
+│   │   ├── collisions.ts         # closeEncounters, encountersFor (cached per routine and per transition)
 │   │   ├── factory.ts            # createRoutine, createDancer, nextColor
 │   │   └── history.ts            # undo/redo stack of Routine snapshots
 │   ├── io/
 │   │   ├── serialize.ts          # serializeRoutine, parseRoutineFile, routineFileName, songDurationsMatch (pure)
 │   │   └── files.ts              # downloadRoutine, readRoutineFile (browser glue)
 │   ├── storage/
-│   │   ├── database.ts           # openDatabase(factory), runRequest, StorageError
-│   │   ├── routines.ts           # saveRoutine, loadRoutine, listRoutines, deleteRoutineWithSong
-│   │   └── songs.ts              # saveSong, loadSong, deleteSong
+│   │   ├── database.ts           # openDatabase(factory), runRequest, StorageError, isStorageFailure
+│   │   ├── routines.ts           # saveRoutine, listRoutines, deleteRoutineWithSong
+│   │   ├── songs.ts              # saveSong, loadSong
+│   │   └── preferences.ts        # readPreference/writePreference (localStorage, degrades when blocked)
 │   ├── playback/
 │   │   ├── clock.ts              # PlaybackClock interface + SilentClock
-│   │   └── audioClock.ts         # AudioClock over HTMLAudioElement
+│   │   ├── audioClock.ts         # AudioClock over HTMLAudioElement
+│   │   └── songLoader.ts         # song lifecycle: object URL, load/cancel (one load at a time)
 │   ├── app/
-│   │   ├── state.ts              # AppState type + initial state
-│   │   ├── store.ts              # createStore: getState / setState / subscribe
-│   │   └── controller.ts         # dispatches edits, history, autosave, playback loop
+│   │   ├── state.ts              # AppState (routine = history.present), currentRoutine, activeFormation, zoom choice
+│   │   ├── store.ts              # createStore + watch(store, select, render)
+│   │   └── controller.ts         # edits, history, one drag session, autosave, playback loop, song flow
 │   └── ui/
 │       ├── dom.ts                # tiny element/SVG helpers
-│       ├── format.ts             # initials (display formatting)
+│       ├── format.ts             # initials, formatDuration (display formatting)
+│       ├── durationField.ts      # "counts with a BPM, seconds without" number field
 │       ├── keyboard.ts           # Space, ←/→, undo/redo shortcuts
 │       ├── notice.ts             # toast notices + "not saving" banner
 │       ├── toolbar.ts            # routine name, routine picker, new/open file/export/delete, save status
@@ -205,7 +208,7 @@ function that throws when it is missing.
 ### Task 4 — Edits and history
 - [x] `model/edits.ts`: `renameRoutine`, `addDancer` (adds a position to every formation), `updateDancer`, `removeDancer` (removes it everywhere), `addFormationAt`, `updateFormationTiming`, `renameFormation`, `removeFormation`, `moveDancer`, `setStageSize`, `setTempo`, `setSongInfo`, `touchRoutine`, `editableFormationAt`, `holdSecondsForEnd`
 - [x] Every edit returns a new routine that passes `parseRoutine`, and throws `EditError` on preconditions in architecture §9
-- [x] `model/history.ts`: `createHistory`, `pushHistory`, `undo`, `redo`, capped at 100 entries
+- [x] `model/history.ts`: `createHistory`, `pushHistory`, `undo`, `redo`, `replacePresent`, `mapHistory`, capped at 100 entries
 - [x] Verify: tests for each edit, each precondition, and undo/redo round-trips
 
 ### Task 5 — Storage
@@ -243,6 +246,14 @@ function that throws when it is missing.
 - [x] `model/collisions.ts`: `closeEncounters`, `encountersByFormation`
 - [x] UI: both edge handles, labeled transition segments, paths + Paths toggle, Transition in panel
 - [x] Verify: unit tests for each function; smoke covers left/right edge drags, minimum gap, paths, ripple persistence, and a crossing routine being flagged
+
+### Task 11 — Review follow-up (2026-11-08, PR #1 review)
+- [x] Validator: id pattern (rules out `__proto__`), `Object.hasOwn` + prototype-free positions, `MAX_FORMATIONS`, song file name length
+- [x] Build-time CSP `<meta>` without `'unsafe-inline'` (timeline positions via CSSOM); CI actions pinned to commit hashes; no cancelling a Pages deploy
+- [x] Song race fixed (`SongLoader` cancels stale loads; routine id re-checked after awaits); delete failures reported; undo ignored mid-drag
+- [x] One routine copy (`history.present`), one drag session, `dragFormationEdge` in the model, zoom stored as the user's choice, `watch()` for every component
+- [x] Collision results cached per routine and per transition; shared helpers instead of copies
+- [x] Verify: unit tests for each fix (incl. mutation checks of the song race and CSP detector); smoke checks the CSP and records violations
 
 ## Definition of done
 
