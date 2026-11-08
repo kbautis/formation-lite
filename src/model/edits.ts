@@ -100,6 +100,7 @@ export function addFormationAt(routine: Routine, options: AddFormationOptions): 
     name: `Formation ${routine.formations.length + 1}`,
     startSeconds,
     holdSeconds: next ? Math.min(defaultHold, next.startSeconds - startSeconds) : defaultHold,
+    stagger: null,
     positions: positionsAt(routine, startSeconds),
   };
   const formations = [...routine.formations, formation].sort((a, b) => a.startSeconds - b.startSeconds);

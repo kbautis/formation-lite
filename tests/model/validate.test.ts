@@ -58,7 +58,17 @@ describe("parseRoutine", () => {
       expectRejected(mutated((r) => (r.format = "other-app")), "format");
     });
     it("rejects unknown versions instead of guessing", () => {
-      expectRejected(mutated((r) => (r.version = 2)), "version");
+      expectRejected(mutated((r) => (r.version = 3)), "version");
+    });
+    it("migrates a version 1 routine: version 2, no ripple on any formation", () => {
+      const parsed = parseRoutine(
+        mutated((r) => {
+          r.version = 1;
+          for (const formation of r.formations) delete formation.stagger;
+        }),
+      );
+      expect(parsed.version).toBe(2);
+      expect(parsed.formations.map((formation) => formation.stagger)).toEqual([null, null]);
     });
   });
 
@@ -216,6 +226,23 @@ describe("parseRoutine", () => {
     it("accepts coordinates at the edge of the wings", () => {
       const parsed = parseRoutine(mutated((r) => (r.formations[0].positions["d-1"] = { x: -0.1, y: 1.1 })));
       expect(parsed.formations[0]?.positions["d-1"]).toEqual({ x: -0.1, y: 1.1 });
+    });
+  });
+
+  describe("stagger (version 2)", () => {
+    it("accepts a ripple", () => {
+      const parsed = parseRoutine(mutated((r) => (r.formations[1].stagger = { order: "front-to-back", spread: 0.5 })));
+      expect(parsed.formations[1]?.stagger).toEqual({ order: "front-to-back", spread: 0.5 });
+    });
+    it("requires the field in version 2", () => {
+      expectRejected(mutated((r) => delete r.formations[1].stagger), "formations[1].stagger");
+    });
+    it("rejects an unknown order", () => {
+      expectRejected(mutated((r) => (r.formations[1].stagger = { order: "random", spread: 0.5 })), "formations[1].stagger.order");
+    });
+    it("rejects a spread outside 0.1–0.9", () => {
+      expectRejected(mutated((r) => (r.formations[1].stagger = { order: "list-order", spread: 0.05 })), "formations[1].stagger.spread");
+      expectRejected(mutated((r) => (r.formations[1].stagger = { order: "list-order", spread: 0.95 })), "formations[1].stagger.spread");
     });
   });
 });

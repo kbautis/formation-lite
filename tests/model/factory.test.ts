@@ -15,6 +15,8 @@ describe("createRoutine", () => {
     expect(routine.dancers).toEqual([]);
     expect(routine.formations).toHaveLength(1);
     expect(routine.formations[0]?.startSeconds).toBe(0);
+    expect(routine.formations[0]?.stagger).toBeNull();
+    expect(routine.version).toBe(2);
     expect(routine.createdAt).toBe("2026-11-07T18:00:00.000Z");
     expect(routine.updatedAt).toBe(routine.createdAt);
   });

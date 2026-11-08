@@ -41,6 +41,7 @@ export function createRoutine(options: CreateRoutineOptions): Routine {
         name: OPENING_FORMATION_NAME,
         startSeconds: 0,
         holdSeconds: OPENING_HOLD_SECONDS,
+        stagger: null,
         positions: {},
       },
     ],

@@ -106,6 +106,44 @@ Done means:
 - Teammate highlight: a viewer picks "just me" to emphasize their dot and draw their
   path through the routine.
 
+## Revision — 2026-11-08: Transitions
+
+Confirmed with the product owner after using the first draft.
+
+### The problem
+
+Dragging a formation's hold could swallow the gap before the next formation, so dancers
+jumped instead of moving, and nothing on the timeline showed how long a transition was.
+Choreographers also need to shape *how* dancers travel, and to see collisions before
+rehearsal does.
+
+### Added scope
+
+- Dragging either edge of a formation on the timeline changes it: the right edge sets how
+  long it holds, the left edge sets when it starts (its end stays put).
+- An edge drag always leaves a minimum transition of 1 count (0.5 s without a BPM) before
+  the neighboring formation. Typing an exact value in the sidebar can still go below it.
+- Each transition shows on the timeline as a labeled segment between formations. The
+  sidebar's **Transition in** sets how long dancers take to arrive in a formation; it
+  moves the previous formation's release, not this formation's arrival, so formations
+  stay on the beats they were placed on.
+- **Ripple:** dancers can start moving one after another during a transition — left to
+  right, right to left, front to back, back to front, or in list order — with an
+  adjustable spread.
+- **Paths:** while on a formation, each dancer's path from the previous formation is drawn
+  on the stage. Pairs who pass closer than 2 ft (0.6 m; 1/15 of the depth on an open
+  stage) mid-transition are flagged in red on the stage, the timeline, and the sidebar.
+  Pairs who start or end that close are not flagged.
+
+### Acceptance criteria
+
+- [ ] Dragging a formation's left edge moves its start; its end does not move.
+- [ ] No edge drag can leave less than 1 count (0.5 s) before a neighboring formation.
+- [ ] Transition lengths are visible on the timeline and settable in the sidebar.
+- [ ] A ripple transition visibly moves dancers one after another in the chosen order.
+- [ ] Paths from the previous formation are shown, and a crossing pair is flagged.
+- [ ] Routine files from the first draft still open.
+
 ## Open Questions
 
 None blocking. Phone editing, stage size, and BPM were resolved on 2026-11-07.

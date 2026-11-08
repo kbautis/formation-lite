@@ -68,7 +68,7 @@ unit tests.
 
 ## 4. Data Architecture
 
-### 4.1 Routine document (the share-file format, version 1)
+### 4.1 Routine document (the share-file format, version 2)
 
 ```json
 {
@@ -112,6 +112,14 @@ naming the field):
 | `formations` | At least one, unique `id`s, `name` 0–40 characters, sorted by `startSeconds`, `startSeconds` ≥ 0, `holdSeconds` ≥ 0, and no overlap: `start[i] + hold[i] ≤ start[i+1]`. New routines start with one "Opening" formation at 0 s. |
 | `positions` | Exactly one entry per dancer in every formation. `x` and `y` are in [−0.1, 1.1]. |
 
+**Version 2 (2026-11-08)** adds one field per formation, `stagger`, describing how dancers
+move *into* that formation: `null` (everyone together) or
+`{ "order": "left-to-right" | "right-to-left" | "front-to-back" | "back-to-front" | "list-order", "spread": 0.1–0.9 }`.
+`parseRoutine` accepts versions 1 and 2 and always returns version 2; a version 1 document
+migrates by giving every formation `stagger: null`. Storage and exports therefore hold
+version 2 from the first save. An app that only knows version 1 rejects version 2 files
+with a clear "unsupported version" error instead of silently dropping the ripple.
+
 ### 4.2 Coordinate system
 
 Positions are **normalized to the stage**, not stored in feet or meters. `x` runs from
@@ -149,6 +157,29 @@ next formation. Adding at a time that falls inside an existing hold is rejected.
 Editing (dragging dancers) is allowed only while the playhead is inside a formation's
 hold, because that is the only time a position is a stored fact rather than an
 interpolation.
+
+### 4.3.1 Transitions (2026-11-08)
+
+A transition is still exactly the gap between one formation's hold ending and the next
+starting; it is not stored separately, so the time model above is unchanged. What is new:
+
+- **Ripple timing.** Within a transition with `stagger`, dancers are ranked 0…1 by the
+  chosen order, using their positions in the *previous* formation (ties by list order).
+  With spread *s*, a dancer of rank *r* moves during the slice
+  `[r·s, r·s + (1 − s)]` of the transition, eased with smoothstep inside that slice.
+  Everyone still leaves at the gap's start and has arrived by its end.
+- **Minimum transition on drags.** `holdSecondsForEnd` and `startSecondsForDrag` keep 1
+  count (0.5 s without a tempo) free before or after the neighbor, unless the gap is
+  already smaller, in which case the drag can only widen it.
+- **Transition in** (`setTransitionIn`) changes the previous formation's hold so the
+  current formation's start, which is pinned to the music, never moves.
+- **Close encounters** (`model/collisions.ts`) sample `positionsAt` across each
+  transition (so ripples are included) and measure distances in stage proportions
+  (real units for a sized stage, 1 = depth for an open stage). A pair is flagged when
+  its closest approach inside the transition is under 2 ft / 0.6 m / 1/15 of the depth
+  while both its start and end distances are not. Sampling can miss a pass that is
+  shorter than one sample interval; 48 samples per transition keep that window under
+  ~0.1 s for transitions up to ~5 s.
 
 ### 4.4 Device storage (IndexedDB)
 
@@ -231,7 +262,8 @@ These decisions are expensive to reverse once routine files exist on people's de
 and in group chats. Everything not listed here is a two-way door and should be decided
 quickly.
 
-1. **The share-file format (§4.1) is a public contract.** Teammates hold old files
+1. **The share-file format (§4.1) is a public contract.** (Exercised on 2026-11-08: version
+   2 added `stagger` with a migration from version 1.) Teammates hold old files
    forever. It is versioned from day one (`format` + `version`), and any change must
    bump `version` and ship a migration from every earlier version.
 2. **Time is stored in song seconds, not counts.** Switching to counts later would

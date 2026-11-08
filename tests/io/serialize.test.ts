@@ -12,7 +12,7 @@ describe("serializeRoutine / parseRoutineFile", () => {
   it("writes readable, versioned JSON", () => {
     const text = serializeRoutine(validRoutineInput());
     expect(text).toContain('\n  "format": "formation-lite/routine"');
-    expect(text).toContain('"version": 1');
+    expect(text).toContain('"version": 2');
     expect(text.endsWith("\n")).toBe(true);
   });
 

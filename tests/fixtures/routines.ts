@@ -4,7 +4,7 @@ import type { Routine } from "../../src/model/types";
 export function validRoutineInput(): Routine {
   return {
     format: "formation-lite/routine",
-    version: 1,
+    version: 2,
     id: "routine-1",
     name: "Regionals 2027",
     createdAt: "2026-11-07T18:00:00.000Z",
@@ -22,6 +22,7 @@ export function validRoutineInput(): Routine {
         name: "Opening",
         startSeconds: 0,
         holdSeconds: 2,
+        stagger: null,
         positions: { "d-1": { x: 0.25, y: 0.5 }, "d-2": { x: 0.75, y: 0.5 } },
       },
       {
@@ -29,6 +30,7 @@ export function validRoutineInput(): Routine {
         name: "Diagonal",
         startSeconds: 4,
         holdSeconds: 2,
+        stagger: null,
         positions: { "d-1": { x: 0, y: 0 }, "d-2": { x: 1, y: 1 } },
       },
     ],

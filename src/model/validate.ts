@@ -1,6 +1,8 @@
 // parseRoutine is the single gate for every routine entering the app (storage, import,
 // and every edit result in tests). It returns a fresh object holding only known fields,
 // with names trimmed, or throws RoutineFormatError naming the first bad field path.
+// It reads every supported version and always returns the current one: a version 1
+// document migrates by giving each formation stagger: null.
 import { RoutineFormatError } from "./errors";
 import {
   BPM_MAX,
@@ -14,6 +16,10 @@ import {
   ROUTINE_NAME_MAX_LENGTH,
   ROUTINE_VERSION,
   STAGE_DIMENSION_MAX,
+  STAGGER_ORDERS,
+  STAGGER_SPREAD_MAX,
+  STAGGER_SPREAD_MIN,
+  SUPPORTED_ROUTINE_VERSIONS,
   type Dancer,
   type Formation,
   type LengthUnit,
@@ -21,6 +27,8 @@ import {
   type Routine,
   type SongInfo,
   type Stage,
+  type Stagger,
+  type StaggerOrder,
   type Tempo,
 } from "./types";
 
@@ -35,9 +43,13 @@ export function parseRoutine(input: unknown): Routine {
   if (routine.format !== ROUTINE_FORMAT) {
     throw new RoutineFormatError("format", `expected "${ROUTINE_FORMAT}"`);
   }
-  if (routine.version !== ROUTINE_VERSION) {
-    throw new RoutineFormatError("version", `unsupported version ${String(routine.version)}; expected ${ROUTINE_VERSION}`);
+  if (typeof routine.version !== "number" || !SUPPORTED_ROUTINE_VERSIONS.includes(routine.version)) {
+    throw new RoutineFormatError(
+      "version",
+      `unsupported version ${String(routine.version)}; this app reads versions ${SUPPORTED_ROUTINE_VERSIONS.join(" and ")}`,
+    );
   }
+  const sourceVersion = routine.version;
   const dancers = readDancers(routine.dancers);
   return {
     format: ROUTINE_FORMAT,
@@ -50,7 +62,7 @@ export function parseRoutine(input: unknown): Routine {
     song: readSong(routine.song),
     tempo: readTempo(routine.tempo),
     dancers,
-    formations: readFormations(routine.formations, dancers),
+    formations: readFormations(routine.formations, dancers, sourceVersion),
   };
 }
 
@@ -113,24 +125,46 @@ function readDancers(value: unknown): Dancer[] {
   });
 }
 
-function readFormations(value: unknown, dancers: readonly Dancer[]): Formation[] {
+function readFormations(value: unknown, dancers: readonly Dancer[], sourceVersion: number): Formation[] {
   const list = readArray(value, "formations");
   if (list.length === 0) throw new RoutineFormatError("formations", "at least one formation is required");
   const seenIds = new Set<string>();
-  const formations = list.map((item, index) => readFormation(item, `formations[${index}]`, dancers, seenIds));
+  const formations = list.map((item, index) => readFormation(item, `formations[${index}]`, dancers, seenIds, sourceVersion));
   assertFormationsOrdered(formations);
   return formations;
 }
 
-function readFormation(value: unknown, path: string, dancers: readonly Dancer[], seenIds: Set<string>): Formation {
+function readFormation(
+  value: unknown,
+  path: string,
+  dancers: readonly Dancer[],
+  seenIds: Set<string>,
+  sourceVersion: number,
+): Formation {
   const formation = readObject(value, path);
   return {
     id: readUniqueId(formation.id, `${path}.id`, seenIds),
     name: readName(formation.name, `${path}.name`, 0, FORMATION_NAME_MAX_LENGTH),
     startSeconds: readNonNegativeNumber(formation.startSeconds, `${path}.startSeconds`),
     holdSeconds: readNonNegativeNumber(formation.holdSeconds, `${path}.holdSeconds`),
+    // Version 1 had no ripple; everyone moved together.
+    stagger: sourceVersion === 1 ? null : readStagger(formation, `${path}.stagger`),
     positions: readPositions(formation.positions, `${path}.positions`, dancers),
   };
+}
+
+function readStagger(formation: RecordValue, path: string): Stagger | null {
+  if (!("stagger" in formation)) throw new RoutineFormatError(path, "missing; use null for everyone moving together");
+  if (formation.stagger === null) return null;
+  const stagger = readObject(formation.stagger, path);
+  if (typeof stagger.order !== "string" || !STAGGER_ORDERS.includes(stagger.order as StaggerOrder)) {
+    throw new RoutineFormatError(`${path}.order`, `expected one of ${STAGGER_ORDERS.join(", ")}`);
+  }
+  const spread = readFiniteNumber(stagger.spread, `${path}.spread`);
+  if (spread < STAGGER_SPREAD_MIN || spread > STAGGER_SPREAD_MAX) {
+    throw new RoutineFormatError(`${path}.spread`, `must be between ${STAGGER_SPREAD_MIN} and ${STAGGER_SPREAD_MAX}`);
+  }
+  return { order: stagger.order as StaggerOrder, spread };
 }
 
 function assertFormationsOrdered(formations: readonly Formation[]): void {
