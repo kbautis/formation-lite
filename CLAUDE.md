@@ -28,9 +28,10 @@ to treat a file format as a versioned public contract.
 ```
 formation-lite/
 ├── CLAUDE.md                     # this file — build spec and task queue
-├── README.md                     # what it is, how to run, how to use
+├── README.md                     # user guide: link to the live app, how to use it
 ├── docs/
 │   ├── requirements.md           # confirmed product brief (source of truth for "what")
+│   ├── development.md            # run locally, tests, smoke test, deploy
 │   └── architecture.md           # design, data format, one-way doors (source of truth for "how")
 ├── index.html                    # app shell
 ├── package.json                  # scripts: dev, build, test, typecheck, smoke
@@ -79,7 +80,7 @@ formation-lite/
 │       ├── durationField.ts      # "counts with a BPM, seconds without" number field
 │       ├── keyboard.ts           # Space, ←/→, undo/redo shortcuts
 │       ├── notice.ts             # toast notices + "not saving" banner
-│       ├── toolbar.ts            # routine name, routine picker, new/open file/export/delete, save status
+│       ├── toolbar.ts            # routine name, routine picker, new/open file/export/delete, save status; Load song on phones
 │       ├── transport.ts          # play/pause, readout, add formation, flip, Paths, Collisions, undo/redo, zoom −/Fit/+
 │       ├── stagePanel.ts         # open stage vs. real width × depth
 │       ├── sidebarToggle.ts      # Hide/Show panels so the stage gets the full width (per-device preference)
@@ -236,7 +237,7 @@ function that throws when it is missing.
 ### Task 9 — Deploy
 - [x] `.github/workflows/deploy.yml`: on push to `main`, run typecheck + test + build and publish `dist/` to GitHub Pages
 - [x] README: what it is, how to use it, "export is your backup"
-- [ ] Verify: the workflow is green and the Pages URL loads the app (needs Pages enabled in repo settings)
+- [x] Verify: the workflow is green and the deploy job succeeds (2026-11-09, merge of PR #1; the live page is checked by opening https://kbautis.github.io/formation-lite/)
 
 ### Task 10 — Transitions (revision 2026-11-08, see docs/requirements.md)
 - [x] Format v2: `Formation.stagger`, v1 → v2 migration in `parseRoutine`

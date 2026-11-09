@@ -332,6 +332,9 @@ body.sidebar-hidden .workspace { grid-template-columns: minmax(0, 1fr); }
 
 /* Phone: view-only */
 body.view-only [data-edit-only] { display: none !important; }
+/* Controls only the phone (view-only) layout needs, e.g. loading a song without the sidebar. */
+[data-view-only] { display: none; }
+body.view-only [data-view-only] { display: inline-flex; }
 body.view-only .workspace { grid-template-columns: minmax(0, 1fr); }
 
 @media (max-width: 720px) {

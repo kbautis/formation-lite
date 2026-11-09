@@ -4,149 +4,197 @@ A free, minimalist dance formation planner synced to music. Place dancers on a s
 pin formations to moments in your song, and press play to watch everyone move. There
 are no accounts and nothing to pay for, and your routines stay on your device.
 
+**Open the app: [kbautis.github.io/formation-lite](https://kbautis.github.io/formation-lite/)**
+
+It runs in your browser, so there's nothing to install. Use a recent version of Chrome,
+Edge, Firefox, or Safari on a laptop to build routines; on a phone it's a viewer for
+watching them.
+
 ## Why I made this
 
 I created formation-lite because I wanted a free choreography app I could use on my
 laptop. It's a personal project, not intended to be for-profit. There's probably a lot
 of room for improvement, so I'm open to suggestions and feedback.
 
-## Using it
+## Quick start
 
-1. **Name your routine** at the top. A new routine starts with one "Opening" formation.
-2. **Load your song** under *Music*. If you want 8-counts on the timeline, type the BPM,
-   play the song, pause on the first "1", and press *Count 1 is at the playhead*. The
-   BPM is optional: without it everything works on minutes and seconds.
-3. **Add dancers** under *Dancers*. Each gets a color and shows their initials on stage.
-4. **Drag dancers** into the opening formation.
-5. **Move the playhead** by clicking or dragging the timeline, then press *+ Formation*.
-   The new formation starts as a copy of what's on stage; drag dancers to their new spots.
-   Dancers glide in a straight line from one formation to the next.
-6. **Play** (or press Space) to watch it with the music. *Audience view* flips the stage
-   to the dancers' point of view.
-7. **Stage size** is open by default. Under *Stage*, set a real width × depth for a
-   specific floor. The grid switches to feet or meters and dancers keep their relative
-   spots.
+1. Open the app. A new routine called "Untitled routine" is ready; click its name at the
+   top to rename it.
+2. Under **Music** in the sidebar, press **Load song** and pick your track (MP3 and M4A
+   are the safest choices).
+3. Under **Dancers**, type a name and press **Add** for each dancer. Each one appears on
+   the stage as a colored dot with their initials.
+4. Drag the dots into your opening formation.
+5. Click a later spot on the timeline, press **+ Formation**, and drag dancers to their
+   next spots. Repeat for the rest of the routine.
+6. Press **Play** (or Space) to watch everyone move with the music.
 
-Click a formation on the timeline to jump to it and edit its name, start time, or hold
-length. On the timeline, drag a formation's **left edge** to change when it starts or its
-**right edge** to change how long it holds. Drags snap to the beat when a BPM is set and
-always leave at least 1 count (0.5 s) for dancers to move.
+Everything saves automatically in your browser as you go.
+
+## Finding your way around
+
+The **top bar** holds the routine's name, a menu to switch between your saved routines,
+and the **New**, **Open file**, **Export**, and **Delete** buttons. The note at the far
+right ("Saved on this device") tells you your work is stored.
+
+The **stage** fills most of the screen. The audience is at the bottom and upstage is at
+the top; the dashed center line and the numbered marks along the front edge work like
+floor tape. The grey border around the stage is the wings, where dancers can wait
+offstage.
+
+The **sidebar** on the right has four sections: **Formation** (the formation you're on),
+**Dancers**, **Music**, and **Stage**. Press **Hide panels** at the bottom right to give
+the stage the whole width, and **Show panels** to bring them back.
+
+The **timeline** runs along the bottom. Each blue block is a formation, the dashed line
+between two blocks is the transition between them, and the orange line is the playhead
+(where you are in the song). Above it are **Play**, the current time and count,
+**+ Formation**, the view and display toggles, **Undo**/**Redo**, and the zoom buttons.
+
+## Building a routine
+
+### Music and counts
+
+Load your song under **Music**. The timeline stretches to the song's full length and
+playback follows the music exactly.
+
+Counting in 8s is optional. If you want it, type the song's **BPM**, play the song,
+pause on the first "1", and press **Count 1 is at the playhead**. The timeline then shows
+8-count numbers, the readout shows where you are ("8-count 3 · 5"), and formations snap
+to the beat when you place or drag them. Without a BPM, everything works in minutes and
+seconds.
+
+### Dancers
+
+Add dancers under **Dancers**. Click a dancer's color square to change their color, edit
+their name in place, or press **×** to remove them from the whole routine. Clicking a
+dancer in the list or on the stage highlights them.
+
+### Formations
+
+A formation is where everyone stands at a moment in the song. To make one, move the
+playhead to that moment (click the timeline) and press **+ Formation**. It starts as a
+copy of what's on stage, so you only move the dancers who change.
+
+You can only drag dancers while you're *on* a formation. Between formations dancers are
+mid-move, and the stage says so; click a formation's block on the timeline to jump to it.
+
+With a formation selected, the **Formation** section lets you rename it, set exactly when
+it **starts**, set how long it **holds**, or delete it.
+
+### Timing on the timeline
+
+Drag a formation block's **right edge** to make it hold longer or shorter, and its
+**left edge** to change when it starts (its end stays put). Edges snap to the beat when
+you've set a BPM, and they always leave at least 1 count (half a second without a BPM)
+for dancers to get to the next formation.
+
+The timeline fits the whole song in the window. Use **+** and **−** to zoom in on a
+section (the timeline then scrolls sideways), and **Fit** to see the whole song again.
 
 ### Transitions
 
-The dashed segment between two formations is the transition, labeled with its length.
-With a formation selected, the sidebar's **Transition in** section sets:
+The dashed segment between two formations is the transition: the time dancers have to
+move from one to the next, labeled with its length. With a formation selected, its
+**Transition in** section sets:
 
 - **Takes:** how long dancers have to arrive. Changing it moves when the previous
-  formation releases; this formation stays on its beat.
-- **Ripple:** dancers set off one after another (left to right, front to back, in list
-  order, and so on), with a **Spread** for how staggered they are.
+  formation lets go, so the formation you're on stays on its beat.
+- **Ripple:** instead of everyone moving together, dancers set off one after another,
+  left to right, right to left, front to back, back to front, or in the order of your
+  dancer list. **Spread** sets how staggered they are.
 
-While you're on a formation, each dancer's path from the previous formation is drawn on
-the stage (toggle with **Paths**). If two dancers pass closer than 2 ft (0.6 m) mid-move,
-their paths and the transition turn red and the sidebar says who and when. The collision
-check is optional: turn it off with **Collisions** (this device remembers the choice). The timeline fits the whole song in the window; **−/+** zoom in for detail and **Fit**
-shows the whole song again. **Hide panels** (bottom right) gives the stage the full width; this device
-remembers the choice. ←/→ step one count (or one second without a BPM). Ctrl/⌘+Z undoes.
+### Paths and collisions
 
-### Sharing with your team
+While you're on a formation, each dancer's path from the previous formation is drawn as a
+dashed line, with a faint circle where they came from. Press **Paths** to hide or show
+them.
 
-Press **Export** to download a small `.formation.json` file and send it to your team.
-A teammate opens the app, presses **Open file**, picks the file, and loads their own
-copy of the song. The song is never inside the file. If you send an updated version
-later, opening it replaces their copy and keeps the song they already loaded.
+If two dancers pass closer than about 2 ft (0.6 m) while moving, their paths turn red,
+the transition on the timeline turns red, and the sidebar says who and when, with a
+**Show** button that jumps to that moment. Dancers who start or end close together, like
+partners, aren't flagged. Press **Collisions** to turn this check off (the app remembers
+your choice).
 
-On a phone the app is a viewer: open, play, scrub, and flip. Editing needs a larger screen.
+### Stage size and views
 
-### Export is your backup
+The stage starts as an open, unitless floor. To plan for a specific competition floor,
+tick **Set the real stage size** under **Stage** and enter its width and depth in feet or
+meters. The grid then shows real distances, and every dancer keeps the same relative
+spot.
 
-Routines save automatically in your browser on this device. Browsers can clear site
-data (Safari in particular may clear it after long periods without use), and private
-windows don't keep it at all. Export routines you care about.
+Press **Audience view** to flip the stage to the **Dancer view**: what the dancers see
+facing the audience, with left and right swapped. Press it again to flip back.
 
-## Running it locally
+### Undo, saving, and other routines
 
-### 1. Install Node.js
+**Undo** and **Redo** step through every change, and one drag counts as one step. Your
+work saves automatically; use **New** to start another routine and the menu next to the
+name to switch between them. **Delete** removes the open routine and its song from this
+device.
 
-You need Node.js 22.12 or newer. It comes with `npm`, which installs the project's tools.
-Check whether you already have it:
+## Sharing with your team
 
-```bash
-node --version
-```
+Press **Export** to download a small `.formation.json` file and send it to your team in
+a group chat or email. The song is never inside the file, which keeps it tiny and avoids
+sharing copyrighted music.
 
-If that prints `command not found` or a version below 22.12, install Node.js one of these
-ways, then close and reopen your terminal:
+A teammate opens the app, presses **Open file**, and picks the file. The app then asks
+them to load their own copy of the song (by name). If you later send an updated version,
+opening it replaces their copy of the routine and keeps the song they already loaded.
 
-- **macOS with Homebrew:**
+## On your phone
 
-  ```bash
-  brew install node
-  ```
+On a phone the app is a viewer. Open a shared file with **Open file**, press
+**Load song** in the top bar to pick your copy of the song, then play, scrub the
+timeline, and flip between the audience and dancer views. Editing controls are hidden;
+use a laptop or a wider screen to edit.
 
-- **macOS or Windows without Homebrew:** download the installer marked **LTS** from
-  [nodejs.org](https://nodejs.org) and run it.
-- **Linux:** use your distribution's Node.js 22 package or
-  [nvm](https://github.com/nvm-sh/nvm), then run `nvm install 22`.
+## Your data and backups
 
-Run `node --version` again to confirm it prints `v22` or higher.
+Routines and songs are saved in your browser on the device you used, not online. That
+means a routine made on your laptop won't appear on another computer or in another
+browser until you export it and open the file there.
 
-### 2. Get the code and install
+**Export is your backup.** Browsers can clear saved site data (Safari in particular may
+do this after long periods without visiting), and private or incognito windows don't
+keep anything after you close them. Export routines you care about. If saving isn't
+possible at all, a red banner says "Not saving on this device".
 
-```bash
-git clone https://github.com/kbautis/formation-lite.git
-```
+## Keyboard shortcuts
 
-```bash
-cd formation-lite
-```
+| Key | What it does |
+|---|---|
+| Space | Play or pause |
+| ← / → | Step back or forward one count (one second without a BPM) |
+| Ctrl/⌘ + Z | Undo |
+| Ctrl/⌘ + Shift + Z, or Ctrl + Y | Redo |
 
-```bash
-npm install
-```
+Shortcuts are ignored while you're typing in a field.
 
-npm may warn that `fsevents` has install scripts it didn't run. That's an optional macOS
-file-watching helper and the app works without it.
+## Troubleshooting
 
-### 3. Start the app
+**The song won't load or play.** Try an MP3 or M4A file. Songs over 100 MB are refused;
+export a smaller copy from your music app.
 
-```bash
-npm run dev
-```
+**I can't drag a dancer.** The playhead is between formations, where dancers are
+mid-move. Click a formation's block on the timeline, then drag.
 
-Open the address it prints, usually http://localhost:5173. Edits to the code reload the
-page automatically. Press Ctrl+C in the terminal to stop it.
+**A formation won't get any longer.** It's stopping 1 count before the next formation so
+dancers have time to move. Drag the next formation later first, or type an exact hold in
+the sidebar.
 
-To pick up new changes later, run `git pull`, restart `npm run dev`, and reload the page
-with Cmd+Shift+R (Ctrl+Shift+R on Windows and Linux).
+**My routine is missing.** Check the routine menu next to the name. If it's not there,
+you may be in a different browser, on a different device, or in a private window; open
+your exported file with **Open file**.
 
-## Developing
+**A teammate sees "Load … to hear the music".** The song isn't shared with the file.
+They need to press **Load song** (under **Music** on a laptop, in the top bar on a phone)
+and pick their own copy.
 
-Run the unit tests, the type checker, and the browser smoke test:
+## For developers
 
-```bash
-npm test
-```
-
-```bash
-npm run typecheck
-```
-
-```bash
-npm run smoke
-```
-
-`npm run smoke` builds the site and drives it in headless Chromium through the whole
-workflow: create, add dancers, load a song, set BPM, add formations, play, reload,
-export, import on a fresh profile, blocked storage, and the phone layout. It expects
-Playwright and Chromium to be installed globally, resolvable through `NODE_PATH`.
-
-The design is in [`docs/architecture.md`](docs/architecture.md), the product brief in
-[`docs/requirements.md`](docs/requirements.md), and the build plan in
-[`CLAUDE.md`](CLAUDE.md).
-
-## Deploying
-
-The GitHub Actions workflow in `.github/workflows/deploy.yml` typechecks, tests, and
-builds every push and pull request. Pushes to `main` also publish to GitHub Pages once
-Pages is enabled with **Settings → Pages → Source: GitHub Actions**.
+To run the app locally, run the tests, or contribute changes, see
+[docs/development.md](docs/development.md). The product brief is in
+[docs/requirements.md](docs/requirements.md) and the design in
+[docs/architecture.md](docs/architecture.md).

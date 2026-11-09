@@ -24,6 +24,8 @@ export function mountToolbar(root: HTMLElement, controller: Controller): void {
   const newButton = el("button", { type: "button", "data-edit-only": true }, ["New"]);
   const importInput = el("input", { type: "file", accept: ".json,application/json", hidden: true });
   const importButton = el("button", { type: "button" }, ["Open file"]);
+  const phoneSongInput = el("input", { type: "file", accept: "audio/*", class: "visually-hidden", "data-testid": "phone-song-input" });
+  const phoneSongButton = el("label", { class: "button", "data-view-only": true }, ["Load song", phoneSongInput]);
   const exportButton = el("button", { type: "button" }, ["Export"]);
   const deleteButton = el("button", { type: "button", class: "danger", "data-edit-only": true }, ["Delete"]);
   const status = el("span", { class: "save-status", title: "Your work saves in this browser. Export a file as your backup." });
@@ -32,7 +34,7 @@ export function mountToolbar(root: HTMLElement, controller: Controller): void {
     el("span", { class: "brand" }, ["formation-lite"]),
     nameInput,
     picker,
-    el("div", { class: "toolbar-actions" }, [newButton, importButton, importInput, exportButton, deleteButton, status]),
+    el("div", { class: "toolbar-actions" }, [newButton, importButton, importInput, phoneSongButton, exportButton, deleteButton, status]),
   );
 
   nameInput.addEventListener("change", () => {
@@ -57,6 +59,11 @@ export function mountToolbar(root: HTMLElement, controller: Controller): void {
     );
   });
   exportButton.addEventListener("click", () => controller.exportCurrentRoutine());
+  phoneSongInput.addEventListener("change", () => {
+    const file = phoneSongInput.files?.[0];
+    phoneSongInput.value = "";
+    if (file) void controller.loadSongFile(file);
+  });
   deleteButton.addEventListener("click", () => {
     const { routine } = controller;
     if (window.confirm(`Delete “${routine.name}” and its song from this device? This can't be undone.`)) {
