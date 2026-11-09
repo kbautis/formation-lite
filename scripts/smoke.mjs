@@ -373,6 +373,11 @@ async function main() {
     check(!(await phonePage.locator(".sidebar").isVisible()), "phone layout hides the editing sidebar");
     check(!(await phonePage.locator("text=+ Formation").isVisible()), "phone layout hides add formation");
     check(await phonePage.locator(".play-button").isVisible(), "phone layout keeps play");
+    // A teammate on a phone must be able to load their own copy of the song.
+    check(await phonePage.locator("text=Load song").first().isVisible(), "phone layout can load a song");
+    await phonePage.setInputFiles("[data-testid='phone-song-input']", songPath);
+    await phonePage.waitForFunction(() => document.querySelector("audio")?.src.startsWith("blob:"));
+    check(true, "phone layout loads the song for playback");
     await phonePage.click("text=Audience view");
     check((await phonePage.locator("text=Dancer view").count()) === 1, "phone layout can flip the view");
     await phonePage.screenshot({ path: path.join(ARTIFACTS, "phone.png") });
