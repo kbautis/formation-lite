@@ -7,7 +7,8 @@ are no accounts and nothing to pay for, and your routines stay on your device.
 ## Why I made this
 
 I created formation-lite because I wanted a free choreography app I could use on my
-laptop. It's a personal project, not intended to be for-profit.
+laptop. It's a personal project, not intended to be for-profit. There's probably a lot
+of room for improvement, so I'm open to suggestions and feedback.
 
 ## Using it
 
