@@ -4,6 +4,11 @@ A free, minimalist dance formation planner synced to music. Place dancers on a s
 pin formations to moments in your song, and press play to watch everyone move. There
 are no accounts and nothing to pay for, and your routines stay on your device.
 
+## Why I made this
+
+I created formation-lite because I wanted a free choreography app I could use on my
+laptop. It's a personal project, not intended to be for-profit.
+
 ## Using it
 
 1. **Name your routine** at the top. A new routine starts with one "Opening" formation.
