@@ -1,0 +1,375 @@
+import { describe, expect, it } from "vitest";
+import {
+  DEFAULT_HOLD_BEATS,
+  DEFAULT_HOLD_SECONDS,
+  addDancer,
+  addFormationAt,
+  defaultSpot,
+  editableFormationAt,
+  dragFormationEdge,
+  formationLabel,
+  MIN_TRANSITION_BEATS,
+  MIN_TRANSITION_SECONDS,
+  minimumTransitionSeconds,
+  setStagger,
+  setTransitionIn,
+  transitionInSeconds,
+  moveDancer,
+  removeDancer,
+  removeFormation,
+  renameFormation,
+  renameRoutine,
+  setSongInfo,
+  setStageSize,
+  setTempo,
+  touchRoutine,
+  updateDancer,
+  updateFormationTiming,
+} from "../../src/model/edits";
+import { EditError } from "../../src/model/errors";
+import { parseRoutine } from "../../src/model/validate";
+import type { Routine } from "../../src/model/types";
+import { validRoutineInput } from "../fixtures/routines";
+
+// Fixture: 2 dancers; f-1 holds 0–2 s, f-2 holds 4–6 s; tempo 120 BPM from 0.5 s.
+const base = validRoutineInput();
+const untimed: Routine = { ...base, tempo: null };
+
+// Edge drags go through dragFormationEdge; these read back the timing it produced.
+function holdAfterEndDrag(routine: Routine, formationId: string, seconds: number): number {
+  return dragFormationEdge(routine, formationId, "end", seconds).formations.find((f) => f.id === formationId)!.holdSeconds;
+}
+function startAfterStartDrag(routine: Routine, formationId: string, seconds: number): number {
+  return dragFormationEdge(routine, formationId, "start", seconds).formations.find((f) => f.id === formationId)!.startSeconds;
+}
+
+function expectValid(routine: Routine): void {
+  expect(parseRoutine(routine)).toEqual(routine);
+}
+
+describe("renameRoutine", () => {
+  it("sets a trimmed name", () => {
+    const renamed = renameRoutine(base, "  Nationals ");
+    expect(renamed.name).toBe("Nationals");
+    expect(base.name).toBe("Regionals 2027");
+  });
+  it("rejects a blank name", () => {
+    expect(() => renameRoutine(base, " ")).toThrow(EditError);
+  });
+});
+
+describe("touchRoutine", () => {
+  it("stamps updatedAt with the given time in UTC", () => {
+    expect(touchRoutine(base, new Date("2026-11-08T01:02:03.000Z")).updatedAt).toBe("2026-11-08T01:02:03.000Z");
+  });
+});
+
+describe("addDancer", () => {
+  const dancer = { id: "d-3", name: "Cam", color: "#4363d8" };
+
+  it("appends the dancer and gives them a spot in every formation", () => {
+    const next = addDancer(base, dancer);
+    expect(next.dancers.map((d) => d.id)).toEqual(["d-1", "d-2", "d-3"]);
+    for (const formation of next.formations) expect(formation.positions["d-3"]).toEqual(defaultSpot(2));
+    expectValid(next);
+  });
+  it("rejects a duplicate id", () => {
+    expect(() => addDancer(base, { ...dancer, id: "d-1" })).toThrow(EditError);
+  });
+  it("rejects a 41st dancer", () => {
+    let routine: Routine = { ...base, dancers: [], formations: base.formations.map((f) => ({ ...f, positions: {} })) };
+    for (let i = 0; i < 40; i++) routine = addDancer(routine, { id: `x-${i}`, name: `X${i}`, color: "#000000" });
+    expect(() => addDancer(routine, dancer)).toThrow(EditError);
+  });
+});
+
+describe("defaultSpot", () => {
+  it("gives the first 20 dancers distinct on-stage spots", () => {
+    const spots = Array.from({ length: 20 }, (_, i) => defaultSpot(i));
+    expect(new Set(spots.map((s) => `${s.x},${s.y}`)).size).toBe(20);
+    for (const spot of spots) {
+      expect(spot.x).toBeGreaterThan(0);
+      expect(spot.x).toBeLessThan(1);
+      expect(spot.y).toBeGreaterThan(0);
+      expect(spot.y).toBeLessThan(1);
+    }
+  });
+});
+
+describe("updateDancer", () => {
+  it("changes name and color", () => {
+    const next = updateDancer(base, "d-1", { name: " Ana R ", color: "#3cb44b" });
+    expect(next.dancers[0]).toEqual({ id: "d-1", name: "Ana R", color: "#3cb44b" });
+  });
+  it("rejects an unknown dancer", () => {
+    expect(() => updateDancer(base, "ghost", { name: "X" })).toThrow(EditError);
+  });
+  it("rejects an invalid color", () => {
+    expect(() => updateDancer(base, "d-1", { color: "blue" })).toThrow(EditError);
+  });
+});
+
+describe("removeDancer", () => {
+  it("removes the dancer and their spot in every formation", () => {
+    const next = removeDancer(base, "d-1");
+    expect(next.dancers.map((d) => d.id)).toEqual(["d-2"]);
+    for (const formation of next.formations) expect("d-1" in formation.positions).toBe(false);
+    expectValid(next);
+  });
+  it("rejects an unknown dancer", () => {
+    expect(() => removeDancer(base, "ghost")).toThrow(EditError);
+  });
+});
+
+describe("addFormationAt", () => {
+  it("copies what is on stage at that moment", () => {
+    const next = addFormationAt(untimed, { id: "f-new", seconds: 3 });
+    const added = next.formations.find((f) => f.id === "f-new")!;
+    expect(added.startSeconds).toBe(3);
+    expect(added.positions["d-1"]).toEqual({ x: 0.125, y: 0.25 });
+    expectValid(next);
+  });
+  it("inserts in time order with a default name", () => {
+    const next = addFormationAt(untimed, { id: "f-new", seconds: 10 });
+    expect(next.formations.map((f) => f.id)).toEqual(["f-1", "f-2", "f-new"]);
+    expect(next.formations[2]?.name).toBe("Formation 3");
+  });
+  it("holds for 2 seconds without a tempo", () => {
+    const next = addFormationAt(untimed, { id: "f-new", seconds: 10 });
+    expect(next.formations[2]?.holdSeconds).toBe(DEFAULT_HOLD_SECONDS);
+  });
+  it("snaps to the nearest beat and holds 4 counts with a tempo", () => {
+    const next = addFormationAt(base, { id: "f-new", seconds: 10.2 });
+    const added = next.formations[2]!;
+    expect(added.startSeconds).toBe(10);
+    expect(added.holdSeconds).toBe(DEFAULT_HOLD_BEATS * 0.5);
+  });
+  it("shortens the hold so a minimum transition is left before the next formation", () => {
+    const next = addFormationAt(untimed, { id: "f-new", seconds: 3 });
+    expect(next.formations[1]?.holdSeconds).toBe(1 - MIN_TRANSITION_SECONDS);
+  });
+  it("starts new formations with everyone moving together", () => {
+    expect(addFormationAt(untimed, { id: "f-new", seconds: 10 }).formations[2]?.stagger).toBeNull();
+  });
+  it("rejects a time inside an existing hold", () => {
+    expect(() => addFormationAt(untimed, { id: "f-new", seconds: 1 })).toThrow(EditError);
+    expect(() => addFormationAt(untimed, { id: "f-new", seconds: 4 })).toThrow(EditError);
+  });
+  it("rejects a duplicate id", () => {
+    expect(() => addFormationAt(untimed, { id: "f-1", seconds: 10 })).toThrow(EditError);
+  });
+});
+
+describe("updateFormationTiming", () => {
+  it("changes start and hold", () => {
+    const next = updateFormationTiming(base, "f-2", { startSeconds: 3, holdSeconds: 1 });
+    expect(next.formations[1]).toMatchObject({ startSeconds: 3, holdSeconds: 1 });
+  });
+  it("rejects a hold that would run into the next formation", () => {
+    expect(() => updateFormationTiming(base, "f-1", { startSeconds: 0, holdSeconds: 5 })).toThrow(EditError);
+  });
+  it("rejects moving past a neighboring formation", () => {
+    expect(() => updateFormationTiming(base, "f-2", { startSeconds: 0, holdSeconds: 0 })).toThrow(EditError);
+  });
+  it("rejects an unknown formation", () => {
+    expect(() => updateFormationTiming(base, "ghost", { startSeconds: 0, holdSeconds: 0 })).toThrow(EditError);
+  });
+});
+
+describe("renameFormation", () => {
+  it("sets a trimmed name, allowing empty", () => {
+    expect(renameFormation(base, "f-1", " Wedge ").formations[0]?.name).toBe("Wedge");
+    expect(renameFormation(base, "f-1", "").formations[0]?.name).toBe("");
+  });
+});
+
+describe("removeFormation", () => {
+  it("removes the formation", () => {
+    expect(removeFormation(base, "f-1").formations.map((f) => f.id)).toEqual(["f-2"]);
+  });
+  it("refuses to remove the last formation", () => {
+    const single = removeFormation(base, "f-1");
+    expect(() => removeFormation(single, "f-2")).toThrow(EditError);
+  });
+});
+
+describe("moveDancer", () => {
+  it("moves one dancer in one formation only", () => {
+    const next = moveDancer(base, { formationId: "f-1", dancerId: "d-1", position: { x: 0.9, y: 0.1 } });
+    expect(next.formations[0]?.positions["d-1"]).toEqual({ x: 0.9, y: 0.1 });
+    expect(next.formations[1]?.positions["d-1"]).toEqual({ x: 0, y: 0 });
+  });
+  it("clamps to the wings", () => {
+    const next = moveDancer(base, { formationId: "f-1", dancerId: "d-1", position: { x: 5, y: -5 } });
+    expect(next.formations[0]?.positions["d-1"]).toEqual({ x: 1.1, y: -0.1 });
+  });
+  it("rejects an unknown dancer or formation", () => {
+    expect(() => moveDancer(base, { formationId: "f-1", dancerId: "ghost", position: { x: 0, y: 0 } })).toThrow(EditError);
+    expect(() => moveDancer(base, { formationId: "ghost", dancerId: "d-1", position: { x: 0, y: 0 } })).toThrow(EditError);
+  });
+});
+
+describe("setStageSize", () => {
+  it("sets a size without moving any dancer", () => {
+    const next = setStageSize(base, { width: 12, depth: 10, unit: "m" });
+    expect(next.stage.size).toEqual({ width: 12, depth: 10, unit: "m" });
+    expect(next.formations).toEqual(base.formations);
+  });
+  it("returns to an open stage", () => {
+    expect(setStageSize(base, null).stage.size).toBeNull();
+  });
+  it("rejects invalid dimensions", () => {
+    expect(() => setStageSize(base, { width: 0, depth: 10, unit: "m" })).toThrow(EditError);
+  });
+});
+
+describe("setTempo", () => {
+  it("sets and clears the tempo without moving any formation", () => {
+    const next = setTempo(base, { bpm: 100, firstBeatSeconds: 0.2 });
+    expect(next.tempo).toEqual({ bpm: 100, firstBeatSeconds: 0.2 });
+    expect(next.formations).toEqual(base.formations);
+    expect(setTempo(base, null).tempo).toBeNull();
+  });
+  it("rejects an out-of-range BPM", () => {
+    expect(() => setTempo(base, { bpm: 10, firstBeatSeconds: 0 })).toThrow(EditError);
+  });
+});
+
+describe("setSongInfo", () => {
+  it("sets and clears song metadata", () => {
+    expect(setSongInfo(base, { fileName: "b.mp3", durationSeconds: 90 }).song).toEqual({ fileName: "b.mp3", durationSeconds: 90 });
+    expect(setSongInfo(base, null).song).toBeNull();
+  });
+});
+
+describe("editableFormationAt", () => {
+  it("returns the formation being held", () => {
+    expect(editableFormationAt(base, 1).id).toBe("f-1");
+  });
+  it("refuses mid-transition, where positions are not stored facts", () => {
+    expect(() => editableFormationAt(base, 3)).toThrow(EditError);
+  });
+});
+
+describe("dragFormationEdge — right edge (hold)", () => {
+  // untimed: f-1 holds 0–2 s, f-2 starts at 4 s. base: same, with 120 BPM from 0.5 s.
+  it("is the time from the formation's start to the dragged end", () => {
+    expect(holdAfterEndDrag(untimed, "f-1", 3.2)).toBeCloseTo(3.2);
+  });
+  it("stops a minimum transition before the next formation", () => {
+    expect(holdAfterEndDrag(untimed, "f-1", 9)).toBe(4 - MIN_TRANSITION_SECONDS);
+    // 120 BPM: one count is 0.5 s.
+    expect(holdAfterEndDrag(base, "f-1", 9)).toBe(3.5);
+  });
+  it("can only shrink a gap that is already below the minimum", () => {
+    const tight = updateFormationTiming(untimed, "f-1", { startSeconds: 0, holdSeconds: 3.8 });
+    expect(holdAfterEndDrag(tight, "f-1", 9)).toBe(3.8);
+    expect(holdAfterEndDrag(tight, "f-1", 3)).toBe(3);
+  });
+  it("never goes below zero", () => {
+    expect(holdAfterEndDrag(untimed, "f-2", 1)).toBe(0);
+  });
+  it("is unlimited after the last formation", () => {
+    expect(holdAfterEndDrag(untimed, "f-2", 30)).toBe(26);
+  });
+  it("snaps the end to the nearest beat when there is a tempo", () => {
+    expect(holdAfterEndDrag(base, "f-1", 3.2)).toBe(3);
+    expect(holdAfterEndDrag(base, "f-1", 3.3)).toBe(3.5);
+  });
+  it("rejects an unknown formation or a non-finite time", () => {
+    expect(() => holdAfterEndDrag(base, "ghost", 3)).toThrow(EditError);
+    expect(() => holdAfterEndDrag(base, "f-1", Number.NaN)).toThrow(EditError);
+  });
+});
+
+describe("minimumTransitionSeconds", () => {
+  it(`is ${MIN_TRANSITION_BEATS} count with a tempo and ${MIN_TRANSITION_SECONDS} s without`, () => {
+    expect(minimumTransitionSeconds({ ...base, tempo: { bpm: 60, firstBeatSeconds: 0 } })).toBe(1);
+    expect(minimumTransitionSeconds(untimed)).toBe(MIN_TRANSITION_SECONDS);
+  });
+});
+
+describe("dragFormationEdge — left edge (start)", () => {
+  // untimed: f-1 holds 0–2 s; f-2 holds 4–6 s.
+  it("moves the start to the dragged time", () => {
+    expect(startAfterStartDrag(untimed, "f-2", 5)).toBe(5);
+  });
+  it("stops a minimum transition after the previous formation", () => {
+    expect(startAfterStartDrag(untimed, "f-2", 1)).toBe(2 + MIN_TRANSITION_SECONDS);
+  });
+  it("never passes the formation's own end", () => {
+    expect(startAfterStartDrag(untimed, "f-2", 7)).toBe(6);
+  });
+  it("never goes before 0 for the first formation", () => {
+    expect(startAfterStartDrag(untimed, "f-1", -1)).toBe(0);
+  });
+  it("snaps to the nearest beat with a tempo", () => {
+    expect(startAfterStartDrag(base, "f-2", 4.7)).toBe(4.5);
+  });
+  it("can only widen a gap that is already below the minimum", () => {
+    const tight = updateFormationTiming(untimed, "f-2", { startSeconds: 2.2, holdSeconds: 3.8 });
+    expect(startAfterStartDrag(tight, "f-2", 1)).toBe(2.2);
+  });
+  it("rejects an unknown formation or a non-finite time", () => {
+    expect(() => startAfterStartDrag(base, "ghost", 3)).toThrow(EditError);
+    expect(() => startAfterStartDrag(base, "f-2", Number.NaN)).toThrow(EditError);
+  });
+});
+
+describe("transitionInSeconds", () => {
+  it("is the gap between the previous hold and this formation", () => {
+    expect(transitionInSeconds(untimed, "f-2")).toBe(2);
+  });
+  it("is null for the first formation", () => {
+    expect(transitionInSeconds(untimed, "f-1")).toBeNull();
+  });
+});
+
+describe("setTransitionIn", () => {
+  it("changes the previous hold so this formation's start stays on its beat", () => {
+    const next = setTransitionIn(untimed, "f-2", 3);
+    expect(next.formations[0]?.holdSeconds).toBe(1);
+    expect(next.formations[1]?.startSeconds).toBe(4);
+    expect(transitionInSeconds(next, "f-2")).toBe(3);
+  });
+  it("allows an instant change when typed", () => {
+    expect(transitionInSeconds(setTransitionIn(untimed, "f-2", 0), "f-2")).toBe(0);
+  });
+  it("refuses a transition longer than the time since the previous formation started", () => {
+    expect(() => setTransitionIn(untimed, "f-2", 5)).toThrow(EditError);
+  });
+  it("refuses the first formation and negative lengths", () => {
+    expect(() => setTransitionIn(untimed, "f-1", 1)).toThrow(EditError);
+    expect(() => setTransitionIn(untimed, "f-2", -1)).toThrow(EditError);
+  });
+});
+
+describe("setStagger", () => {
+  it("sets and clears a ripple", () => {
+    const rippled = setStagger(base, "f-2", { order: "back-to-front", spread: 0.4 });
+    expect(rippled.formations[1]?.stagger).toEqual({ order: "back-to-front", spread: 0.4 });
+    expect(setStagger(rippled, "f-2", null).formations[1]?.stagger).toBeNull();
+  });
+  it("rejects an invalid spread", () => {
+    expect(() => setStagger(base, "f-2", { order: "list-order", spread: 2 })).toThrow(EditError);
+  });
+});
+
+describe("dragFormationEdge", () => {
+  it("returns the same routine when the drag changes nothing", () => {
+    expect(dragFormationEdge(untimed, "f-1", "end", 2)).toBe(untimed);
+  });
+  it("keeps the end when the left edge moves", () => {
+    const formation = dragFormationEdge(untimed, "f-2", "start", 5).formations[1]!;
+    expect(formation.startSeconds + formation.holdSeconds).toBe(6);
+  });
+});
+
+describe("formationLabel", () => {
+  it("uses the name, or 'Formation N' when it is blank", () => {
+    expect(formationLabel(base, base.formations[0]!)).toBe("Opening");
+    expect(formationLabel(renameFormation(base, "f-2", ""), base.formations[1]!)).toBe("Diagonal");
+    const unnamed = renameFormation(base, "f-2", "");
+    expect(formationLabel(unnamed, unnamed.formations[1]!)).toBe("Formation 2");
+  });
+});

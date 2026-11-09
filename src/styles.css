@@ -1,0 +1,347 @@
+/* formation-lite — one stylesheet. Colors are tokens; dark mode follows the system. */
+:root {
+  color-scheme: light dark;
+  --bg: #f6f5f2;
+  --surface: #ffffff;
+  --surface-2: #efede8;
+  --text: #1d1d1f;
+  --muted: #6b6a66;
+  --border: #dcd9d2;
+  --accent: #3b5bdb;
+  --accent-text: #ffffff;
+  --danger: #c92a2a;
+  --floor: #ffffff;
+  --wings: #ebe8e1;
+  --grid: #e1ddd5;
+  --grid-center: #b9b3a7;
+  --block: #dbe4ff;
+  --block-active: #3b5bdb;
+  --block-text: #1d2b6b;
+  --playhead: #e8590c;
+  --focus: #4c6ef5;
+  --radius: 8px;
+  --font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #141416;
+    --surface: #1d1d20;
+    --surface-2: #26262a;
+    --text: #ececef;
+    --muted: #9d9ca3;
+    --border: #34343a;
+    --accent: #748ffc;
+    --accent-text: #0e1230;
+    --danger: #ff8787;
+    --floor: #1f1f23;
+    --wings: #18181b;
+    --grid: #2d2d33;
+    --grid-center: #55555f;
+    --block: #2b3566;
+    --block-active: #748ffc;
+    --block-text: #dbe4ff;
+  }
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.4 var(--font);
+}
+
+#app {
+  display: grid;
+  /* minmax(0, …) lets wide content (a long song's timeline) scroll inside its own box instead of widening the page. */
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  height: 100dvh;
+}
+
+button, .button, input, select {
+  font: inherit;
+  color: inherit;
+}
+
+button, .button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  cursor: pointer;
+  white-space: nowrap;
+}
+button:hover:not(:disabled), .button:hover { background: var(--surface-2); }
+button:disabled { opacity: 0.45; cursor: default; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); }
+button.primary:hover:not(:disabled) { filter: brightness(1.08); background: var(--accent); }
+button.danger { color: var(--danger); }
+button[aria-pressed="true"] { background: var(--surface-2); font-weight: 600; }
+.icon-button { padding: 4px 10px; }
+
+input, select {
+  min-height: 32px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-width: 0;
+}
+input[type="color"] { padding: 2px; width: 36px; flex: none; }
+input[type="checkbox"] { min-height: auto; }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* Header */
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-wrap: wrap;
+}
+.brand { font-weight: 700; letter-spacing: -0.01em; margin-right: 4px; }
+.routine-name { font-weight: 600; width: 220px; }
+.routine-picker { max-width: 200px; }
+.toolbar-actions { display: flex; align-items: center; gap: 6px; margin-left: auto; flex-wrap: wrap; }
+.save-status { color: var(--muted); font-size: 12px; margin-left: 4px; }
+.save-status[data-status="failed"], .save-status[data-status="unavailable"] { color: var(--danger); }
+
+/* Notices */
+.notice-region { position: relative; }
+.storage-banner {
+  padding: 6px 16px;
+  background: color-mix(in srgb, var(--danger) 14%, var(--surface));
+  color: var(--danger);
+  font-weight: 600;
+}
+.notice {
+  position: absolute;
+  z-index: 10;
+  top: 8px;
+  left: 50%;
+  translate: -50% 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(560px, calc(100vw - 32px));
+  padding: 8px 8px 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: 0 6px 24px rgb(0 0 0 / 0.15);
+}
+.notice[data-kind="error"] { border-color: var(--danger); }
+.notice-dismiss { border: none; min-height: 24px; padding: 0 6px; }
+[hidden] { display: none !important; }
+
+/* Workspace */
+/* The stage is the primary surface: it takes all space the sidebar doesn't need. */
+.workspace {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 264px;
+  min-height: 0;
+}
+body.sidebar-hidden .sidebar { display: none; }
+body.sidebar-hidden .workspace { grid-template-columns: minmax(0, 1fr); }
+.stage-area {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 8px 12px 4px;
+}
+.stage-svg { flex: 1; width: 100%; min-height: 0; touch-action: none; user-select: none; }
+/* The hint floats over the bottom of the stage so it doesn't take height from it. */
+.stage-hint {
+  position: absolute;
+  left: 50%;
+  bottom: 8px;
+  translate: -50% 0;
+  margin: 0;
+  max-width: calc(100% - 24px);
+  padding: 2px 10px;
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  color: var(--muted);
+  text-align: center;
+  pointer-events: none;
+}
+.stage-hint:empty { display: none; }
+
+.wings { fill: var(--wings); stroke: var(--border); stroke-width: 0.3; stroke-dasharray: 1.5 1.5; }
+.floor { fill: var(--floor); stroke: var(--grid-center); stroke-width: 0.5; }
+.grid-line { stroke: var(--grid); stroke-width: 0.25; }
+.grid-line.center { stroke: var(--grid-center); stroke-width: 0.45; stroke-dasharray: 2 1; }
+.grid-label { font-size: 2.6px; fill: var(--muted); }
+.audience-label, .upstage-label { font-size: 3px; letter-spacing: 0.25em; fill: var(--muted); font-weight: 600; }
+.dancer circle { stroke: var(--floor); stroke-width: 0.6; }
+.dancer .dancer-initials { fill: #ffffff; font-size: 2.6px; font-weight: 700; pointer-events: none; }
+.dancer.selected circle { stroke: var(--text); stroke-width: 0.9; }
+.stage-svg.is-editable .dancer { cursor: grab; }
+.stage-svg:not(.is-editable) .dancer { opacity: 0.92; }
+
+/* Sidebar */
+.sidebar {
+  overflow-y: auto;
+  border-left: 1px solid var(--border);
+  background: var(--surface);
+}
+.panel { padding: 12px 16px 16px; border-bottom: 1px solid var(--border); display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.panel h2 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.panel .count { font-weight: 400; text-transform: none; letter-spacing: 0; }
+.field { display: grid; grid-template-columns: 1fr 110px; align-items: center; gap: 8px; }
+.field span { color: var(--muted); }
+.checkbox { display: flex; align-items: center; gap: 8px; }
+.size-fields { display: grid; grid-template-columns: 1fr auto 1fr 64px; align-items: center; gap: 6px; }
+.hint { margin: 0; color: var(--muted); font-size: 12px; }
+.song-name { margin: 0; overflow-wrap: anywhere; }
+.song-name[data-state="missing"] { color: var(--danger); }
+.formation-editor, .formation-between { display: grid; gap: 8px; }
+.add-dancer { display: flex; gap: 6px; }
+.add-dancer input { flex: 1; }
+.dancer-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 4px; }
+.dancer-list li { display: flex; align-items: center; gap: 6px; padding: 2px; border-radius: var(--radius); }
+.dancer-list li.selected { background: var(--surface-2); }
+.dancer-list li input:not([type="color"]) { flex: 1; }
+
+/* Transport + timeline */
+.timeline-area { border-top: 1px solid var(--border); background: var(--surface); }
+.transport { display: flex; align-items: center; gap: 8px; padding: 8px 16px; flex-wrap: wrap; }
+.play-button { min-width: 76px; }
+.readout { display: flex; gap: 10px; align-items: baseline; font-variant-numeric: tabular-nums; min-width: 190px; }
+.time-readout { font-weight: 600; font-size: 16px; }
+.count-readout { color: var(--muted); }
+.spacer { flex: 1; }
+.zoom { display: flex; gap: 2px; }
+
+.timeline-scroll { overflow-x: auto; overflow-y: hidden; padding: 0 16px 10px; }
+.timeline-content { position: relative; height: 92px; min-width: 100%; cursor: text; touch-action: pan-y; }
+.ruler, .counts, .track { position: absolute; left: 0; right: 0; }
+/* Labels at the very end of the song would spill past the timeline and make it scroll. */
+.ruler, .counts { overflow: hidden; }
+.ruler { top: 0; height: 18px; border-bottom: 1px solid var(--border); }
+.ruler-mark { position: absolute; top: 0; padding-left: 3px; border-left: 1px solid var(--border); font-size: 11px; color: var(--muted); height: 18px; }
+.counts { top: 20px; height: 16px; }
+.count-mark { position: absolute; top: 4px; height: 12px; border-left: 1px solid var(--grid); }
+.count-mark.downbeat { top: 0; height: 16px; border-left-color: var(--grid-center); padding-left: 2px; font-size: 10px; color: var(--muted); }
+.track { top: 40px; height: 44px; }
+.formation-block {
+  position: absolute;
+  top: 0;
+  height: 44px;
+  min-height: 0;
+  justify-content: flex-start;
+  overflow: visible;
+  padding: 0 6px;
+  border: 1px solid color-mix(in srgb, var(--block-active) 40%, transparent);
+  border-radius: 6px;
+  background: var(--block);
+  color: var(--block-text);
+  font-size: 12px;
+  text-overflow: ellipsis;
+}
+.formation-block:hover:not(:disabled) { background: var(--block); filter: brightness(0.97); }
+.formation-block.active, .formation-block.active:hover:not(:disabled) { background: var(--block-active); color: var(--accent-text); }
+.formation-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* Edge grips: left sets the start, right sets the hold. They overhang the block so short holds stay grabbable. */
+.edge-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 12px;
+  z-index: 1;
+  cursor: ew-resize;
+  touch-action: none;
+}
+.edge-handle.start { left: -6px; }
+.edge-handle.end { right: -6px; }
+.edge-handle::after {
+  content: "";
+  position: absolute;
+  top: 10px;
+  bottom: 10px;
+  left: 4px;
+  width: 4px;
+  border-radius: 2px;
+  background: var(--block-active);
+  opacity: 0.55;
+}
+.formation-block.active .edge-handle::after { background: var(--accent-text); }
+.edge-handle:hover::after { opacity: 1; }
+
+/* The gap before a formation is its transition: a thin labeled bar between blocks. */
+.transition-segment {
+  position: absolute;
+  top: 16px;
+  height: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border-top: 2px dashed var(--grid-center);
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.transition-segment.has-collision { border-top-color: var(--danger); color: var(--danger); font-weight: 600; }
+
+/* Paths from the previous formation, drawn under the dancers while editing. */
+.paths .path { stroke-width: 0.5; stroke-dasharray: 1.4 1; opacity: 0.7; fill: none; }
+.paths .path.collides { stroke: var(--danger) !important; stroke-width: 0.8; opacity: 1; }
+.paths .ghost { fill: none; stroke-width: 0.4; opacity: 0.6; }
+
+.transition-editor { display: grid; gap: 8px; padding-top: 4px; border-top: 1px dashed var(--border); }
+.transition-editor h3 { margin: 4px 0 0; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); }
+.transition-fields { display: grid; gap: 8px; }
+.transition-fields input[type="range"] { width: 100%; }
+.encounters { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.encounter { display: flex; align-items: center; gap: 8px; color: var(--danger); font-size: 12px; }
+.encounter span { flex: 1; }
+.playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--playhead);
+  pointer-events: none;
+}
+
+/* Phone: view-only */
+body.view-only [data-edit-only] { display: none !important; }
+body.view-only .workspace { grid-template-columns: minmax(0, 1fr); }
+
+@media (max-width: 720px) {
+  .app-header { padding: 8px 12px; }
+  .brand { display: none; }
+  .routine-name { width: auto; flex: 1; }
+  .routine-picker { max-width: 40vw; }
+  .toolbar-actions { margin-left: 0; }
+  .transport { padding: 8px 12px; }
+  .readout { min-width: 0; }
+  .timeline-scroll { padding: 0 12px 10px; }
+  .stage-area { padding: 8px; }
+}
