@@ -345,3 +345,15 @@ body.view-only .workspace { grid-template-columns: minmax(0, 1fr); }
   .timeline-scroll { padding: 0 12px 10px; }
   .stage-area { padding: 8px; }
 }
+
+/* Share link: the copy-by-hand fallback */
+.share-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.share-link-input { flex: 1; min-width: 0; font-family: ui-monospace, monospace; font-size: 12px; }

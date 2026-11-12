@@ -1,7 +1,8 @@
 // Browser smoke test against the built site (npm run smoke builds first).
 // Drives the real workflow from docs/requirements.md in Chromium: create, add dancers,
 // load a song, set BPM, place two formations, play, reload, export, import on a fresh
-// profile, and open the phone (view-only) layout. Fails on any page error.
+// profile, share a link (share sheet, clipboard, copy by hand) and open it on a fresh
+// profile and a phone, and open the phone (view-only) layout. Fails on any page error.
 // Uses the machine's Playwright install (resolved through NODE_PATH), not a project dependency.
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -92,7 +93,7 @@ function watchErrors(page, label) {
   });
 }
 
-async function openApp(context, label) {
+async function openApp(context, label, url = BASE_URL) {
   const page = await context.newPage();
   watchErrors(page, label);
   // Record every Content Security Policy violation; any one fails the run.
@@ -101,9 +102,54 @@ async function openApp(context, label) {
       console.error(`CSP violation: ${event.violatedDirective} blocked ${event.blockedURI}`);
     });
   });
-  await page.goto(BASE_URL);
+  await page.goto(url);
   await page.waitForSelector("body[data-ready='true']");
   return page;
+}
+
+/** Every routine record in this profile's IndexedDB, read directly (not through the app). */
+function storedRoutines(page) {
+  return page.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const open = indexedDB.open("formation-lite");
+        open.onerror = () => reject(open.error);
+        open.onsuccess = () => {
+          const request = open.result.transaction("routines").objectStore("routines").getAll();
+          request.onerror = () => reject(request.error);
+          request.onsuccess = () => {
+            open.result.close();
+            resolve(request.result);
+          };
+        };
+      }),
+  );
+}
+
+async function storedRoutineNamed(page, name) {
+  return (await storedRoutines(page)).find((routine) => routine.name === name);
+}
+
+/** Records every dialog's message and answers it. */
+function answerDialogs(page, accept) {
+  const messages = [];
+  page.on("dialog", (dialog) => {
+    messages.push(dialog.message());
+    void (accept ? dialog.accept() : dialog.dismiss());
+  });
+  return messages;
+}
+
+/** Opens a share link in a page already showing the app, the way a tap in a chat app would when the tab is open. */
+async function followLinkInPlace(page, link) {
+  await page.evaluate((hash) => {
+    location.hash = hash;
+  }, new URL(link).hash);
+}
+
+function tamper(link) {
+  const middle = Math.floor((link.indexOf("#share=1.") + link.length) / 2);
+  return `${link.slice(0, middle)}${link[middle] === "A" ? "B" : "A"}${link.slice(middle + 1)}`;
 }
 
 // Dancers are found by name: the stage re-orders SVG nodes so the selected dancer draws on top.
@@ -322,6 +368,54 @@ async function main() {
     await page.waitForSelector(".song-name[data-state='loaded']");
     check((await page.locator(".routine-picker option").count()) === 1, "re-import replaces instead of duplicating");
     check((await page.locator(".song-name").textContent()).includes("test-song.wav"), "re-import keeps the song already on this device");
+
+    // ── Share link: share sheet, then clipboard, then copy by hand ──────────
+    const shareButton = page.locator("button:has-text('Share link')");
+    await page.evaluate(() => {
+      navigator.canShare = () => true;
+      navigator.share = async (data) => {
+        window.sharedLink = data.url;
+      };
+    });
+    await shareButton.click();
+    await page.waitForFunction(() => typeof window.sharedLink === "string");
+    const firstLink = await page.evaluate(() => window.sharedLink);
+    check(firstLink.startsWith(`${BASE_URL}#share=1.`), `Share link goes through the share sheet with an encoding 1 link (${firstLink.length} characters)`);
+    const sharedCopy = await storedRoutineNamed(page, "Smoke Regionals");
+
+    await desktop.grantPermissions(["clipboard-read", "clipboard-write"], { origin: new URL(BASE_URL).origin });
+    await page.evaluate(() => {
+      navigator.canShare = () => false;
+    });
+    await page.waitForTimeout(10);
+    await shareButton.click();
+    await page.waitForSelector(".notice:not([hidden]):has-text('Link copied')");
+    const copiedLink = await page.evaluate(() => navigator.clipboard.readText());
+    check(copiedLink.startsWith(`${BASE_URL}#share=1.`), "without a share sheet the link is copied to the clipboard");
+
+    await page.evaluate(() => {
+      navigator.clipboard.writeText = () => Promise.reject(new DOMException("Write permission denied.", "NotAllowedError"));
+    });
+    await page.waitForTimeout(10);
+    await shareButton.click();
+    await page.waitForSelector(".share-field:not([hidden])");
+    const manual = await page.locator(".share-link-input").evaluate((input) => ({
+      value: input.value,
+      selected: document.activeElement === input && input.selectionStart === 0 && input.selectionEnd === input.value.length,
+      readOnly: input.readOnly,
+    }));
+    check(manual.value.startsWith(`${BASE_URL}#share=1.`) && manual.selected && manual.readOnly, "without a clipboard the link is shown selected in a read-only field");
+    const newestLink = manual.value;
+    await page.click(".share-field button:has-text('Done')");
+    check(!(await page.locator(".share-field").isVisible()), "the copy-by-hand field closes");
+
+    // Opening a link of a routine you already have (accepting the replace prompt) keeps your song.
+    page.once("dialog", (dialog) => void dialog.accept());
+    await followLinkInPlace(page, firstLink);
+    await page.waitForSelector(".notice:not([hidden]):has-text('Opened')");
+    check(await page.evaluate(() => location.hash === ""), "an opened link is cleared from the address bar");
+    await page.waitForSelector(".song-name[data-state='loaded']");
+    check((await page.locator(".song-name").textContent()).includes("test-song.wav"), "opening a link of a routine you have keeps the song already on this device");
     await desktop.close();
 
     // ── Storage blocked: the app still works and says it isn't saving ───────
@@ -365,6 +459,65 @@ async function main() {
     check((await teammatePage.locator(".encounter").count()) === 1, "turning collisions back on restores the warnings");
     await teammate.close();
 
+
+    // ── Share link on a fresh profile ───────────────────────────────────────
+    const linkContext = await browser.newContext({ viewport: { width: 1280, height: 800 } });
+    const linkPage = await openApp(linkContext, "link", firstLink);
+    const linkDialogs = answerDialogs(linkPage, true);
+    await linkPage.waitForFunction(() => document.querySelector(".routine-name")?.value === "Smoke Regionals");
+    check(await linkPage.evaluate(() => location.hash === "" && location.pathname.length > 0), "after a link opens, the address bar no longer carries the routine");
+    check(JSON.stringify(await storedRoutineNamed(linkPage, "Smoke Regionals")) === JSON.stringify(sharedCopy), "a link reproduces the routine exactly on a fresh profile");
+    check((await linkPage.locator(".dancer").count()) === 3 && (await linkPage.locator(".formation-block").count()) === 2, "the linked routine shows its dancers and formations");
+    check((await linkPage.locator(".song-name[data-state='missing']").count()) === 1, "the song is not in the link; the app asks for it by name");
+    check(linkDialogs.length === 0, "opening a routine new to this device does not ask to replace anything");
+
+    const routinesBeforeReload = (await storedRoutines(linkPage)).length;
+    await linkPage.reload();
+    await linkPage.waitForSelector("body[data-ready='true']");
+    await linkPage.waitForTimeout(300);
+    check(
+      linkDialogs.length === 0 &&
+        (await storedRoutines(linkPage)).length === routinesBeforeReload &&
+        (await linkPage.inputValue(".routine-name")) === "Smoke Regionals" &&
+        (await linkPage.locator(".notice:not([hidden]):has-text('Opened')").count()) === 0,
+      "reloading after a link opens does not offer it again",
+    );
+
+    await followLinkInPlace(linkPage, newestLink);
+    await linkPage.waitForFunction(() => document.querySelector(".notice:not([hidden])")?.textContent.includes("Opened"));
+    check(linkDialogs.length === 1 && linkDialogs[0].includes("Replace") && linkDialogs[0].includes("Shared "), `a newer link asks before replacing and says when it was shared (${JSON.stringify(linkDialogs[0])})`);
+    check(!linkDialogs[0].includes("older"), "a newer link is not flagged as older");
+
+    await linkPage.click(".notice-dismiss");
+    const olderAnswers = [];
+    linkPage.removeAllListeners("dialog");
+    linkPage.on("dialog", (dialog) => {
+      olderAnswers.push(dialog.message());
+      void dialog.dismiss();
+    });
+    const beforeOlder = await storedRoutines(linkPage);
+    await followLinkInPlace(linkPage, firstLink);
+    await linkPage.waitForFunction(() => location.hash === "");
+    await linkPage.waitForTimeout(300);
+    check(olderAnswers.length === 1 && olderAnswers[0].includes("This link is older than your copy."), "an older link is flagged before anything is replaced");
+    check(JSON.stringify(await storedRoutines(linkPage)) === JSON.stringify(beforeOlder), "keeping your copy changes nothing");
+
+    const beforeTamper = await storedRoutines(linkPage);
+    await followLinkInPlace(linkPage, tamper(newestLink));
+    await linkPage.waitForSelector(".notice[data-kind='error']:not([hidden])");
+    check((await linkPage.locator(".notice").textContent()).includes("Couldn't open this link"), "a tampered link is rejected with a clear message");
+    check(olderAnswers.length === 1, "a tampered link never reaches the replace prompt");
+    check(JSON.stringify(await storedRoutines(linkPage)) === JSON.stringify(beforeTamper), "a tampered link changes nothing on the device");
+
+    await linkPage.click(".notice-dismiss");
+    await linkPage.waitForSelector(".notice", { state: "hidden" });
+    await followLinkInPlace(linkPage, newestLink.slice(0, Math.floor(newestLink.length * 0.8)));
+    await linkPage.waitForSelector(".notice[data-kind='error']:not([hidden])");
+    check((await linkPage.locator(".notice").textContent()).includes("cut off"), "a cut-off link is rejected as damaged or cut off");
+    check(JSON.stringify(await storedRoutines(linkPage)) === JSON.stringify(beforeTamper), "a cut-off link changes nothing on the device");
+    await linkPage.screenshot({ path: path.join(ARTIFACTS, "link-rejected.png") });
+    await linkContext.close();
+
     // ── Phone: view-only ────────────────────────────────────────────────────
     const phone = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
     const phonePage = await openApp(phone, "phone");
@@ -375,8 +528,19 @@ async function main() {
     check(await phonePage.locator(".play-button").isVisible(), "phone layout keeps play");
     await phonePage.click("text=Audience view");
     check((await phonePage.locator("text=Dancer view").count()) === 1, "phone layout can flip the view");
+    check(await phonePage.locator("button:has-text('Share link')").isVisible(), "phone layout keeps Share link");
     await phonePage.screenshot({ path: path.join(ARTIFACTS, "phone.png") });
     await phone.close();
+
+    // ── Phone: open a share link ────────────────────────────────────────────
+    const phoneLinkContext = await browser.newContext({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+    const phoneLinkPage = await openApp(phoneLinkContext, "phone link", newestLink);
+    await phoneLinkPage.waitForFunction(() => document.querySelector(".routine-name")?.value === "Smoke Regionals");
+    check(!(await phoneLinkPage.locator(".sidebar").isVisible()) && (await phoneLinkPage.locator(".play-button").isVisible()), "a link opens in the phone's view-only layout");
+    check((await phoneLinkPage.locator(".dancer").count()) === 3, "the linked routine shows its dancers on the phone");
+    check(await phoneLinkPage.evaluate(() => location.hash === ""), "the phone's address bar no longer carries the routine");
+    await phoneLinkPage.screenshot({ path: path.join(ARTIFACTS, "phone-link.png") });
+    await phoneLinkContext.close();
   } finally {
     await browser.close();
     server.kill();

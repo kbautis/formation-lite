@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
-import { Controller } from "../../src/app/controller";
+import { Controller, type ReplaceDetails, type ShareNavigator } from "../../src/app/controller";
+import { decodeShareLink, encodeShareLink, readShareFragment } from "../../src/io/shareLink";
+import type { Routine } from "../../src/model/types";
 import { openDatabase } from "../../src/storage/database";
 import { listRoutines, saveRoutine } from "../../src/storage/routines";
 import { addDancer, removeDancer, renameRoutine } from "../../src/model/edits";
@@ -32,12 +34,43 @@ class FakeSongs {
 
 let songs: FakeSongs;
 
+/** A navigator whose share sheet and clipboard the test scripts. */
+class FakeNavigator implements ShareNavigator {
+  shared: ShareData[] = [];
+  copied: string[] = [];
+  shareSheet: "accept" | "cancel" | "fail" | "absent" = "absent";
+  clipboardWorks = true;
+  canShare?: (data: ShareData) => boolean;
+  share?: (data: ShareData) => Promise<void>;
+  readonly clipboard = {
+    writeText: async (text: string) => {
+      if (!this.clipboardWorks) throw new DOMException("Write permission denied.", "NotAllowedError");
+      this.copied.push(text);
+    },
+  };
+  useShareSheet(mode: "accept" | "cancel" | "fail"): void {
+    this.shareSheet = mode;
+    this.canShare = () => true;
+    this.share = async (data) => {
+      if (this.shareSheet === "cancel") throw new DOMException("Share canceled", "AbortError");
+      if (this.shareSheet === "fail") throw new DOMException("Not allowed", "NotAllowedError");
+      this.shared.push(data);
+    };
+  }
+}
+
+let shareNavigator: FakeNavigator;
+const APP_URL = "https://example.github.io/formation-lite/";
+const NOW = "2026-11-07T12:00:00.000Z";
+
 function makeController(canEdit = true): Controller {
   return new Controller({
     database,
     songs,
+    navigator: shareNavigator,
+    appUrl: () => APP_URL,
     newId: () => `id-${++idCounter}`,
-    now: () => new Date("2026-11-07T12:00:00.000Z"),
+    now: () => new Date(NOW),
     nowMilliseconds: () => 0,
     canEdit,
   });
@@ -56,6 +89,7 @@ beforeEach(async () => {
   localStorage.clear();
   idCounter = 0;
   songs = new FakeSongs();
+  shareNavigator = new FakeNavigator();
   database = await openDatabase(new IDBFactory());
 });
 
@@ -399,5 +433,170 @@ describe("Controller collision check", () => {
     expect(reopened.store.getState().checkCollisions).toBe(false);
     reopened.toggleCollisionCheck();
     expect(makeController().store.getState().checkCollisions).toBe(true);
+  });
+});
+
+/** Records every replace prompt and answers it. */
+function answering(answer: boolean): { prompts: ReplaceDetails[]; confirm: (details: ReplaceDetails) => boolean } {
+  const prompts: ReplaceDetails[] = [];
+  return { prompts, confirm: (details) => (prompts.push(details), answer) };
+}
+
+async function storedRoutine(id: string): Promise<Routine | undefined> {
+  return (await listRoutines(database)).routines.find((routine) => routine.id === id);
+}
+
+describe("Controller.importRoutine", () => {
+  it("opens and saves a new routine without asking, keeping its edit time", async () => {
+    const controller = makeController();
+    await controller.start();
+    const { prompts, confirm } = answering(true);
+    expect(await controller.importRoutine(validRoutineInput(), confirm)).toBe(true);
+    expect(prompts).toHaveLength(0);
+    expect(controller.routine.id).toBe("routine-1");
+    expect((await storedRoutine("routine-1"))?.updatedAt).toBe(validRoutineInput().updatedAt);
+  });
+
+  it("asks before replacing, with the incoming edit time, and says when it is newer", async () => {
+    await saveRoutine(database, validRoutineInput());
+    const controller = makeController();
+    await controller.start();
+    const incoming = { ...validRoutineInput(), name: "Newer", updatedAt: "2026-11-09T10:00:00.000Z" };
+    const { prompts, confirm } = answering(true);
+    expect(await controller.importRoutine(incoming, confirm)).toBe(true);
+    expect(prompts).toEqual([{ existingName: "Regionals 2027", incomingUpdatedAt: "2026-11-09T10:00:00.000Z", isOlderThanStored: false }]);
+    expect((await storedRoutine("routine-1"))?.name).toBe("Newer");
+  });
+
+  it("flags an incoming copy older than the one on this device", async () => {
+    await saveRoutine(database, validRoutineInput());
+    const controller = makeController();
+    await controller.start();
+    const { prompts, confirm } = answering(true);
+    await controller.importRoutine({ ...validRoutineInput(), updatedAt: "2026-11-01T00:00:00.000Z" }, confirm);
+    expect(prompts[0]?.isOlderThanStored).toBe(true);
+  });
+
+  it("changes nothing when the user keeps their copy", async () => {
+    await saveRoutine(database, validRoutineInput());
+    const controller = makeController();
+    await controller.start();
+    const { confirm } = answering(false);
+    expect(await controller.importRoutine({ ...validRoutineInput(), name: "Theirs" }, confirm)).toBe(false);
+    expect(controller.routine.name).toBe("Regionals 2027");
+    expect((await storedRoutine("routine-1"))?.name).toBe("Regionals 2027");
+  });
+});
+
+describe("Controller.importShareLink", () => {
+  it("opens the routine in a link", async () => {
+    const controller = makeController();
+    await controller.start();
+    const fragment = readShareFragment(new URL(await encodeShareLink(validRoutineInput(), APP_URL)).hash)!;
+    expect(await controller.importShareLink(fragment, answering(true).confirm)).toBe(true);
+    expect(controller.routine).toEqual(validRoutineInput());
+    expect(controller.store.getState().notice?.text).toContain("Regionals 2027");
+  });
+
+  it("rejects a tampered link with a clear message and changes nothing", async () => {
+    await saveRoutine(database, validRoutineInput());
+    const controller = makeController();
+    await controller.start();
+    const before = await listRoutines(database);
+    const fragment = readShareFragment(new URL(await encodeShareLink({ ...validRoutineInput(), name: "Theirs" }, APP_URL)).hash)!;
+    const { prompts, confirm } = answering(true);
+    expect(await controller.importShareLink(`${fragment.slice(0, 40)}${fragment.slice(41)}`, confirm)).toBe(false);
+    expect(prompts).toHaveLength(0);
+    expect(controller.store.getState().notice).toMatchObject({ kind: "error" });
+    expect(controller.store.getState().notice?.text).toMatch(/^Couldn't open this link\./);
+    expect(controller.routine.name).toBe("Regionals 2027");
+    expect(await listRoutines(database)).toEqual(before);
+  });
+});
+
+describe("Controller.shareCurrentRoutine", () => {
+  async function sharedRoutine(url: string): Promise<Routine> {
+    return decodeShareLink(readShareFragment(new URL(url).hash)!);
+  }
+
+  it("uses the share sheet when the browser accepts the link", async () => {
+    await saveRoutine(database, validRoutineInput());
+    shareNavigator.useShareSheet("accept");
+    const controller = makeController();
+    await controller.start();
+    expect(await controller.shareCurrentRoutine()).toBe("shared");
+    const [data] = shareNavigator.shared;
+    expect(data?.title).toBe("Regionals 2027");
+    const routine = await sharedRoutine(data!.url!);
+    expect(routine).toEqual({ ...validRoutineInput(), updatedAt: NOW });
+    expect(shareNavigator.copied).toHaveLength(0);
+  });
+
+  it("stamps the shared time on the copy kept on this device", async () => {
+    await saveRoutine(database, validRoutineInput());
+    shareNavigator.useShareSheet("accept");
+    const controller = makeController();
+    await controller.start();
+    await controller.shareCurrentRoutine();
+    expect((await storedRoutine("routine-1"))?.updatedAt).toBe(NOW);
+    expect(controller.routine.updatedAt).toBe(NOW);
+  });
+
+  it("does nothing more when the share sheet is cancelled", async () => {
+    shareNavigator.useShareSheet("cancel");
+    const controller = makeController();
+    await controller.start();
+    expect(await controller.shareCurrentRoutine()).toBe("cancelled");
+    expect(shareNavigator.copied).toHaveLength(0);
+    expect(controller.store.getState().manualShareLink).toBeNull();
+  });
+
+  it("copies the link when there is no share sheet", async () => {
+    const controller = makeController();
+    await controller.start();
+    expect(await controller.shareCurrentRoutine()).toBe("copied");
+    expect(shareNavigator.copied).toHaveLength(1);
+    expect((await sharedRoutine(shareNavigator.copied[0]!)).id).toBe(controller.routine.id);
+    expect(controller.store.getState().notice?.text).toMatch(/copied/i);
+  });
+
+  it("copies the link when the share sheet fails for another reason", async () => {
+    shareNavigator.useShareSheet("fail");
+    const controller = makeController();
+    await controller.start();
+    expect(await controller.shareCurrentRoutine()).toBe("copied");
+  });
+
+  it("shows the link to copy by hand when the clipboard is refused", async () => {
+    shareNavigator.clipboardWorks = false;
+    const controller = makeController();
+    await controller.start();
+    expect(await controller.shareCurrentRoutine()).toBe("manual");
+    const link = controller.store.getState().manualShareLink;
+    expect(link?.startsWith(`${APP_URL}#share=1.`)).toBe(true);
+    controller.dismissManualShareLink();
+    expect(controller.store.getState().manualShareLink).toBeNull();
+  });
+
+  it("refuses a routine too large for a link and points to Export", async () => {
+    const dancers = Array.from({ length: 40 }, (_, index) => ({ id: `d-${index}`, name: `Dancer ${index}`, color: "#e4572e" }));
+    let seed = 7;
+    const random = () => (seed = (seed * 16_807) % 2_147_483_647) / 2_147_483_647;
+    const formations = Array.from({ length: 500 }, (_, index) => ({
+      id: `f-${index}`,
+      name: "",
+      startSeconds: index * 4,
+      holdSeconds: 2,
+      stagger: null,
+      positions: Object.fromEntries(dancers.map((dancer) => [dancer.id, { x: random(), y: random() }])),
+    }));
+    await saveRoutine(database, { ...validRoutineInput(), dancers, formations });
+    shareNavigator.useShareSheet("accept");
+    const controller = makeController();
+    await controller.start();
+    expect(await controller.shareCurrentRoutine()).toBe("too-large");
+    expect(controller.store.getState().notice?.text).toMatch(/Export/);
+    expect(shareNavigator.shared).toHaveLength(0);
+    expect(shareNavigator.copied).toHaveLength(0);
   });
 });

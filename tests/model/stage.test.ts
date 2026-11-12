@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   OPEN_STAGE_ASPECT,
+  POSITION_DECIMALS,
   clampToWings,
+  roundPosition,
   gridLines,
   gridStep,
   stageAspect,
@@ -91,5 +93,22 @@ describe("clampToWings", () => {
   it("keeps positions within the stage plus wings", () => {
     expect(clampToWings({ x: -0.5, y: 2 })).toEqual({ x: -0.1, y: 1.1 });
     expect(clampToWings({ x: 0.4, y: 0.6 })).toEqual({ x: 0.4, y: 0.6 });
+  });
+});
+
+describe("roundPosition", () => {
+  it("rounds x and y to POSITION_DECIMALS places", () => {
+    expect(POSITION_DECIMALS).toBe(4);
+    expect(roundPosition({ x: 0.123456789, y: 1 / 3 })).toEqual({ x: 0.1235, y: 0.3333 });
+  });
+  it("leaves already-round values unchanged", () => {
+    expect(roundPosition({ x: 0.25, y: -0.1 })).toEqual({ x: 0.25, y: -0.1 });
+  });
+  it("never produces negative zero", () => {
+    expect(Object.is(roundPosition({ x: -0.00001, y: 0 }).x, 0)).toBe(true);
+  });
+  it("serializes to at most four decimals", () => {
+    const rounded = roundPosition({ x: 0.1 + 0.2, y: 2 / 3 });
+    expect(JSON.stringify(rounded)).toBe('{"x":0.3,"y":0.6667}');
   });
 });
