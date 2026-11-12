@@ -56,6 +56,23 @@ A teammate opens the app, presses **Open file**, picks the file, and loads their
 copy of the song. The song is never inside the file. If you send an updated version
 later, opening it replaces their copy and keeps the song they already loaded.
 
+**Share link** does the same in one step. It makes a link that carries the whole
+routine; on a phone it opens the share sheet, and on a laptop it copies the link so you
+can paste it in the team chat. Tapping the link opens the routine in the app and saves
+it on that device, the same as opening the file.
+
+- A link is a snapshot. After you change the routine, send a new link.
+- If a teammate already has the routine, the app asks before replacing it, says when the
+  link's version was shared, and warns when the link is older than the copy they have.
+  Their song stays loaded.
+- The song is never in a link. The routine is in the part of the address after `#`,
+  which browsers don't send to the website, so it only goes where you paste it.
+- A very large routine can be too long for a link. The app says so, and Export still
+  works.
+- A link that was cut off or damaged in the chat is rejected and changes nothing.
+
+Links don't replace the file: **export is still your backup.**
+
 On a phone the app is a viewer: open, play, scrub, and flip. Editing needs a larger screen.
 
 ### Export is your backup
@@ -138,7 +155,8 @@ npm run smoke
 
 `npm run smoke` builds the site and drives it in headless Chromium through the whole
 workflow: create, add dancers, load a song, set BPM, add formations, play, reload,
-export, import on a fresh profile, blocked storage, and the phone layout. It expects
+export, import on a fresh profile, share links (opened on a fresh profile and a phone,
+plus tampered and cut-off links), blocked storage, and the phone layout. It expects
 Playwright and Chromium to be installed globally, resolvable through `NODE_PATH`.
 
 The design is in [`docs/architecture.md`](docs/architecture.md), the product brief in

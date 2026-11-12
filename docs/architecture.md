@@ -273,9 +273,20 @@ https://<site>/<path>#share=1.<payload>
   version was edited (its `updatedAt`), and adds "This link is older than your copy"
   when the incoming `updatedAt` is earlier than the stored one. Songs stay keyed by
   routine id, so a teammate's song survives the update (§4.5).
-- **Verified, and still to verify.** `CompressionStream` with `deflate-raw` ships in
-  Chrome, Firefox 113+ and Safari 16.4+ (MDN); the implementation re-checks this on MDN and
-  notes it in the module's architecture note. How long a link the common chat apps
+- **Saving an opened routine.** `importRoutine` saves the incoming routine as it arrived,
+  `updatedAt` included (it is not an edit, so it is not touched). Otherwise the stored
+  copy would carry the time it was opened, and a link shared before that moment but
+  newer than the teammate's previous copy would be wrongly flagged as older.
+- **Verified, and still to verify.** `CompressionStream` and `DecompressionStream` accept
+  `deflate-raw` from Chrome 103, Firefox 113 and Safari 16.4, desktop and iOS (checked
+  2026-11-12 in MDN's `@mdn/browser-compat-data` 8.1.8, because the MDN site was not
+  reachable from the build machine). In Chromium a cut-off stream makes the reader reject
+  with `TypeError: Compressed input was truncated`, so a cut-off link is reported as
+  damaged (checked by the smoke test). jsdom has no `Blob.prototype.stream`, so the
+  module builds its source stream with `ReadableStream` directly. The share sheet and
+  the clipboard need a recent user gesture, and the link is encoded asynchronously after
+  the click; a browser that refuses for that reason falls through to the next delivery
+  step, ending with the copy-by-hand field. This is unverified on Safari. How long a link the common chat apps
   (WhatsApp, iMessage, Discord) deliver intact is not documented anywhere reliable and
   is checked by hand before release; the results are recorded here.
 
