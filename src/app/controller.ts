@@ -14,6 +14,7 @@ import { canRedo, canUndo, createHistory, mapHistory, pushHistory, redo, replace
 import { timelineDurationSeconds } from "../model/timeline";
 import type { Position, Routine, SongInfo } from "../model/types";
 import { downloadRoutine, readRoutineFile } from "../io/files";
+import { ShareLinkTooLargeError, decodeShareLink, encodeShareLink } from "../io/shareLink";
 import { songDurationsMatch } from "../io/serialize";
 import { AudioClock, type AudioLike } from "../playback/audioClock";
 import { SilentClock, type PlaybackClock } from "../playback/clock";
@@ -34,11 +35,36 @@ const LAST_OPENED_KEY = "formation-lite:last-opened-routine";
 const COLLISION_CHECK_OFF_KEY = "formation-lite:collision-check-off";
 const FALLBACK_AUDIO_MIME_TYPE = "audio/mpeg";
 
+/** What the replace prompt says about an incoming routine whose id is already on this device. */
+export interface ReplaceDetails {
+  readonly existingName: string;
+  /** When the incoming version was last edited (its updatedAt). */
+  readonly incomingUpdatedAt: string;
+  /** The incoming updatedAt is earlier than the copy on this device. */
+  readonly isOlderThanStored: boolean;
+}
+
+export type ConfirmReplace = (details: ReplaceDetails) => boolean;
+
+/** The parts of `navigator` that sharing uses; each may be missing in a given browser. */
+export interface ShareNavigator {
+  canShare?(data: ShareData): boolean;
+  share?(data: ShareData): Promise<void>;
+  readonly clipboard?: { writeText(text: string): Promise<void> };
+}
+
+/** How a share link reached the user: share sheet, clipboard, a field to copy by hand, or not at all. */
+export type ShareOutcome = "shared" | "cancelled" | "copied" | "manual" | "too-large";
+
 export interface ControllerDependencies {
   /** null when IndexedDB is unavailable (private mode, blocked storage). */
   readonly database: IDBDatabase | null;
   /** The song lifecycle (playback/songLoader.ts); its audio element is the playback clock. */
   readonly songs: { load(song: SongSource): Promise<number>; unload(): void; readonly audio: AudioLike };
+  /** Share sheet and clipboard (navigator in the browser). */
+  readonly navigator: ShareNavigator;
+  /** The app's address without fragment or query (origin + pathname); share links start with it. */
+  readonly appUrl: () => string;
   readonly newId: () => string;
   readonly now: () => Date;
   readonly nowMilliseconds: () => number;
@@ -76,6 +102,7 @@ export class Controller {
       zoom: { mode: "fit" },
       showPaths: true,
       checkCollisions: readPreference(COLLISION_CHECK_OFF_KEY) !== "true",
+      manualShareLink: null,
     });
   }
 
@@ -150,8 +177,8 @@ export class Controller {
     else await this.newRoutine();
   }
 
-  /** Returns false when the file was rejected or the user kept their existing copy. */
-  async importRoutineFile(file: File, confirmReplace: (name: string) => boolean): Promise<boolean> {
+  /** Opens a routine file. Returns false when the file was rejected or the user kept their existing copy. */
+  async importRoutineFile(file: File, confirmReplace: ConfirmReplace): Promise<boolean> {
     let routine: Routine;
     try {
       routine = await readRoutineFile(file);
@@ -160,12 +187,88 @@ export class Controller {
       this.notify("error", `Couldn't open ${file.name}. ${error.message}`);
       return false;
     }
+    return this.importRoutine(routine, confirmReplace);
+  }
+
+  /**
+   * Opens the routine in a share link's fragment. A damaged or tampered link is reported
+   * and changes nothing. Returns false when it was rejected or the user kept their copy.
+   */
+  async importShareLink(fragment: string, confirmReplace: ConfirmReplace): Promise<boolean> {
+    let routine: Routine;
+    try {
+      routine = await decodeShareLink(fragment);
+    } catch (error) {
+      if (!(error instanceof RoutineFormatError)) throw error;
+      this.notify("error", `Couldn't open this link. ${error.message}`);
+      return false;
+    }
+    return this.importRoutine(routine, confirmReplace);
+  }
+
+  /**
+   * The one path for a routine arriving from elsewhere (a file or a link). When its id is
+   * already on this device the user is asked first, told when the incoming version was
+   * edited and whether it is older than theirs. It is saved as it arrived, edit time
+   * included, so the next link of the same routine compares against the sender's time,
+   * not the moment it was opened here. Songs are keyed by id, so a loaded song is kept.
+   */
+  async importRoutine(routine: Routine, confirmReplace: ConfirmReplace): Promise<boolean> {
+    await this.flushPendingSave();
     const existing = this.state.savedRoutines.find((candidate) => candidate.id === routine.id);
-    if (existing && !confirmReplace(existing.name)) return false;
+    if (existing && !confirmReplace(replaceDetails(existing, routine))) return false;
     await this.show(routine);
-    await this.saveNow();
+    await this.write(routine);
     this.notify("info", `Opened “${routine.name}”.`);
     return true;
+  }
+
+  /**
+   * Makes a share link for the routine on screen and hands it to the share sheet, the
+   * clipboard, or (when both fail) a field to copy by hand. The share time becomes the
+   * routine's edit time, here and in the link, so teammates can tell which link is newest.
+   */
+  async shareCurrentRoutine(): Promise<ShareOutcome> {
+    const routine = touchRoutine(this.routine, this.deps.now());
+    let url: string;
+    try {
+      url = await encodeShareLink(routine, this.deps.appUrl());
+    } catch (error) {
+      if (!(error instanceof ShareLinkTooLargeError)) throw error;
+      this.notify("error", error.message);
+      return "too-large";
+    }
+    if (!this.drag && this.routine.id === routine.id) {
+      this.store.setState({ history: replacePresent(this.state.history, routine) });
+      await this.write(routine);
+    }
+    return this.deliverShareLink({ title: routine.name, url });
+  }
+
+  private async deliverShareLink(data: { readonly title: string; readonly url: string }): Promise<ShareOutcome> {
+    const navigator = this.deps.navigator;
+    if (navigator.share && navigator.canShare?.(data)) {
+      try {
+        await navigator.share(data);
+        return "shared";
+      } catch (error) {
+        // A cancelled sheet rejects with AbortError: the user chose not to share.
+        if (isAbortError(error)) return "cancelled";
+      }
+    }
+    try {
+      if (!navigator.clipboard) throw new Error("no clipboard");
+      await navigator.clipboard.writeText(data.url);
+      this.notify("info", "Link copied. Paste it in your team chat.");
+      return "copied";
+    } catch {
+      this.store.setState({ manualShareLink: data.url });
+      return "manual";
+    }
+  }
+
+  dismissManualShareLink(): void {
+    this.store.setState({ manualShareLink: null });
   }
 
   exportCurrentRoutine(): void {
@@ -528,10 +631,14 @@ export class Controller {
 
   /** Writes the current routine to this device immediately. */
   async saveNow(): Promise<void> {
+    await this.write(touchRoutine(this.routine, this.deps.now()));
+  }
+
+  /** Writes this routine to this device as it is (edit time included), replacing any pending autosave. */
+  private async write(saved: Routine): Promise<void> {
     const database = this.deps.database;
     if (!database) return;
     this.cancelPendingSave();
-    const saved = touchRoutine(this.routine, this.deps.now());
     try {
       await saveRoutine(database, saved);
     } catch (error) {
@@ -543,4 +650,16 @@ export class Controller {
     const others = this.state.savedRoutines.filter((candidate) => candidate.id !== saved.id);
     this.store.setState({ saveStatus: "saved", savedRoutines: [saved, ...others] });
   }
+}
+
+function replaceDetails(existing: Routine, incoming: Routine): ReplaceDetails {
+  return {
+    existingName: existing.name,
+    incomingUpdatedAt: incoming.updatedAt,
+    isOlderThanStored: Date.parse(incoming.updatedAt) < Date.parse(existing.updatedAt),
+  };
+}
+
+function isAbortError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
 }
