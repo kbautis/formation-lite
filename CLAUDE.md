@@ -59,7 +59,8 @@ formation-lite/
 │   │   └── history.ts            # undo/redo stack of Routine snapshots
 │   ├── io/
 │   │   ├── serialize.ts          # serializeRoutine, parseRoutineFile, routineFileName, songDurationsMatch (pure)
-│   │   └── files.ts              # downloadRoutine, readRoutineFile (browser glue)
+│   │   ├── files.ts              # downloadRoutine, readRoutineFile (browser glue)
+│   │   └── shareLink.ts          # encodeShareLink, readShareFragment, decodeShareLink (encoding 1, capped)
 │   ├── storage/
 │   │   ├── database.ts           # openDatabase(factory), runRequest, StorageError, isStorageFailure
 │   │   ├── routines.ts           # saveRoutine, listRoutines, deleteRoutineWithSong
@@ -79,7 +80,7 @@ formation-lite/
 │       ├── durationField.ts      # "counts with a BPM, seconds without" number field
 │       ├── keyboard.ts           # Space, ←/→, undo/redo shortcuts
 │       ├── notice.ts             # toast notices + "not saving" banner
-│       ├── toolbar.ts            # routine name, routine picker, new/open file/export/delete, save status
+│       ├── toolbar.ts            # routine name, routine picker, new/open file/export/share link/delete, save status
 │       ├── transport.ts          # play/pause, readout, add formation, flip, Paths, Collisions, undo/redo, zoom −/Fit/+
 │       ├── stagePanel.ts         # open stage vs. real width × depth
 │       ├── sidebarToggle.ts      # Hide/Show panels so the stage gets the full width (per-device preference)
@@ -254,6 +255,15 @@ function that throws when it is missing.
 - [x] One routine copy (`history.present`), one drag session, `dragFormationEdge` in the model, zoom stored as the user's choice, `watch()` for every component
 - [x] Collision results cached per routine and per transition; shared helpers instead of copies
 - [x] Verify: unit tests for each fix (incl. mutation checks of the song race and CSP detector); smoke checks the CSP and records violations
+
+### Task 12 — Share links (revision 2026-11-12, see docs/requirements.md)
+- [ ] Positions rounded to `POSITION_DECIMALS` (4) by one `roundPosition`, in every edit that writes a position (architecture §4.2)
+- [ ] `io/shareLink.ts`: `encodeShareLink`, `readShareFragment`, `decodeShareLink` per architecture §4.6 — encoding 1, `SHARE_LINK_MAX_CHARACTERS`, `SHARE_DECOMPRESSED_MAX_BYTES` enforced while streaming, every failure a `RoutineFormatError` at path `link`
+- [ ] Controller: one `importRoutine(routine, confirmReplace)` path for files and links; the replace prompt shows the link's edit time and warns when it is older than the device's copy; `shareCurrentRoutine` (share sheet → clipboard → copy-by-hand field, refusing links that are too long)
+- [ ] `main.ts`: open a link at startup and on `hashchange`, clearing it with `history.replaceState` before decoding
+- [ ] Toolbar **Share link** button; README explains links and that export is still the backup
+- [ ] Verify: unit tests for round-trip exactness, each rejection in §4.6 (incl. a decompression bomb and a cut-off link), fragment parsing, the older/newer prompt and rounding; smoke opens a link in a fresh profile and in the phone viewport, checks the routine matches, that a reload does not offer it again, that a tampered link changes nothing, and that the CSP records no violations
+- [ ] Manual (needs a person): paste a 20-dancer link into WhatsApp, iMessage and Discord, and record in architecture §4.6 whether it arrives intact
 
 ## Definition of done
 

@@ -144,6 +144,57 @@ rehearsal does.
 - [ ] Paths from the previous formation are shown, and a crossing pair is flagged.
 - [ ] Routine files from the first draft still open.
 
+## Revision — 2026-11-12: Share links
+
+Confirmed with the product owner on 2026-11-12.
+
+### The problem
+
+Sharing a routine means exporting a file, attaching it in the team chat, and having
+every teammate download it and pick it in the app, and all of that again for every
+update. Two choreographers trading edits do this many times a week.
+
+### Added scope
+
+- **Share link.** A **Share link** button makes a link that carries the whole routine.
+  Where the browser offers a share sheet the link goes through it; otherwise it is
+  copied. Opening the link opens the routine on that device and saves it there, exactly
+  as opening the file would: the same replace prompt, and the song kept across updates.
+- **A link is a snapshot.** Changing the routine means sending a new link. The song is
+  never in the link; each person loads their own copy once per device.
+- **When it was shared.** Opening a link shows when that version was last edited
+  ("Shared Nov 12, 3:40 pm"), so teammates can tell which link in the chat is newest.
+- **Older link warning.** Opening a link that is older than the copy already on the
+  device says so before anything is replaced.
+- After a link opens, the address bar no longer carries the routine, so a reload or a
+  bookmark does not offer the same snapshot again.
+- **Export** and **Open file** stay. The file is still the backup, and the fallback for a
+  routine too large for a link.
+
+### Still not in scope
+
+Cloud sync, a link that always shows the latest version, live editing, and merging two
+people's edits. The first three need a server. Merging an imported routine into the
+local copy is the likely next step if two choreographers edit the same routine, and it
+goes through this stage first.
+
+### Acceptance criteria
+
+- [ ] A 20-dancer, 40-formation routine can be shared as a link in one click, and
+      opening that link in a fresh browser profile reproduces the routine exactly.
+- [ ] Opening a link on a phone shows the routine in the view-only layout.
+- [ ] Opening a link for a routine already on the device asks before replacing it,
+      shows when the link's version was edited, and warns when it is older than the
+      device's copy.
+- [ ] A teammate who already loaded the song keeps it when opening a newer link of the
+      same routine.
+- [ ] After a link opens, reloading the page does not offer it again.
+- [ ] A damaged, cut-off or tampered link is rejected with a clear message and changes
+      nothing on the device.
+- [ ] A routine too large for a link says so and points to Export.
+- [ ] The song is never in a link, and the routine in a link is never sent to the site's
+      host.
+
 ## Open Questions
 
 None blocking. Phone editing, stage size, and BPM were resolved on 2026-11-07.
