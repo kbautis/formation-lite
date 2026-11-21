@@ -466,7 +466,13 @@ async function main() {
     const linkDialogs = answerDialogs(linkPage, true);
     await linkPage.waitForFunction(() => document.querySelector(".routine-name")?.value === "Smoke Regionals");
     check(await linkPage.evaluate(() => location.hash === "" && location.pathname.length > 0), "after a link opens, the address bar no longer carries the routine");
-    check(JSON.stringify(await storedRoutineNamed(linkPage, "Smoke Regionals")) === JSON.stringify(sharedCopy), "a link reproduces the routine exactly on a fresh profile");
+    // The link carries the sharer's routine stamped with the share time; the sharer's own copy keeps its edit time.
+    const linkedCopy = await storedRoutineNamed(linkPage, "Smoke Regionals");
+    check(
+      JSON.stringify({ ...linkedCopy, updatedAt: null }) === JSON.stringify({ ...sharedCopy, updatedAt: null }) &&
+        Date.parse(linkedCopy.updatedAt) >= Date.parse(sharedCopy.updatedAt),
+      "a link reproduces the routine exactly on a fresh profile, stamped with the time it was shared",
+    );
     check((await linkPage.locator(".dancer").count()) === 3 && (await linkPage.locator(".formation-block").count()) === 2, "the linked routine shows its dancers and formations");
     check((await linkPage.locator(".song-name[data-state='missing']").count()) === 1, "the song is not in the link; the app asks for it by name");
     check(linkDialogs.length === 0, "opening a routine new to this device does not ask to replace anything");
