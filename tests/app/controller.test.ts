@@ -572,14 +572,26 @@ describe("Controller.shareCurrentRoutine", () => {
     expect(shareNavigator.copied).toHaveLength(0);
   });
 
-  it("stamps the shared time on the copy kept on this device", async () => {
+  it("keeps edits made while the link is being encoded", async () => {
+    await saveRoutine(database, validRoutineInput());
+    shareNavigator.useShareSheet("accept");
+    const controller = makeController();
+    await controller.start();
+    const sharing = controller.shareCurrentRoutine();
+    controller.edit((routine) => renameRoutine(routine, "Renamed mid-share"));
+    await sharing;
+    expect(controller.routine.name).toBe("Renamed mid-share");
+  });
+
+  it("stamps the shared time on the link only, not on the copy kept on this device", async () => {
     await saveRoutine(database, validRoutineInput());
     shareNavigator.useShareSheet("accept");
     const controller = makeController();
     await controller.start();
     await controller.shareCurrentRoutine();
-    expect((await storedRoutine("routine-1"))?.updatedAt).toBe(NOW);
-    expect(controller.routine.updatedAt).toBe(NOW);
+    expect((await sharedRoutine(shareNavigator.shared[0]!.url!)).updatedAt).toBe(NOW);
+    expect(controller.routine.updatedAt).toBe(validRoutineInput().updatedAt);
+    expect((await storedRoutine("routine-1"))?.updatedAt).toBe(validRoutineInput().updatedAt);
   });
 
   it("does nothing more when the share sheet is cancelled", async () => {

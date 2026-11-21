@@ -255,7 +255,9 @@ https://<site>/<path>#share=1.<payload>
   GitHub Pages serves the same `index.html` and never receives the routine. The chat app
   the link is pasted into does see it, as it sees an attached file today.
 - **Making a link** (`encodeShareLink(routine, baseUrl)` in `src/io/shareLink.ts`): the
-  controller touches `updatedAt`, the document is serialized compactly, compressed and
+  controller stamps `updatedAt` on the outgoing copy only (as Export does; the routine
+  on screen and in storage is not written back, so an edit made while the link is
+  encoded is never overwritten), the document is serialized compactly, compressed and
   encoded, and appended to `location.origin + location.pathname`. A link longer than
   `SHARE_LINK_MAX_CHARACTERS` (100,000) is refused with "too large for a link — use
   Export". Delivery tries `navigator.share({ title, url })` when `navigator.canShare`

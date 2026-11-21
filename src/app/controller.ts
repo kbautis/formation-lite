@@ -238,8 +238,10 @@ export class Controller {
 
   /**
    * Makes a share link for the routine on screen and hands it to the share sheet, the
-   * clipboard, or (when both fail) a field to copy by hand. The share time becomes the
-   * routine's edit time, here and in the link, so teammates can tell which link is newest.
+   * clipboard, or (when both fail) a field to copy by hand. Like Export, only the copy
+   * that leaves is stamped with the share time (so teammates can tell which link is
+   * newest); the routine on screen and in storage is left alone, so nothing edited while
+   * the link is encoded can be lost.
    */
   async shareCurrentRoutine(): Promise<ShareOutcome> {
     const routine = touchRoutine(this.routine, this.deps.now());
@@ -250,10 +252,6 @@ export class Controller {
       if (!(error instanceof ShareLinkTooLargeError)) throw error;
       this.notify("error", error.message);
       return "too-large";
-    }
-    if (!this.drag && this.routine.id === routine.id) {
-      this.store.setState({ history: replacePresent(this.state.history, routine) });
-      await this.write(routine);
     }
     return this.deliverShareLink({ title: routine.name, url });
   }
