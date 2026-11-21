@@ -5,12 +5,14 @@
 //   re-thrown as EditError, the one error type the UI shows for a refused edit.
 // - Preconditions from docs/architecture.md §9 throw EditError up front with a message
 //   written for the choreographer, not the developer.
+// - Every position an edit writes goes through roundPosition (4 decimals, §4.2), so
+//   float noise never reaches storage or a share link.
 // - Edits never touch updatedAt; the controller calls touchRoutine once before saving.
 // - history.ts keeps whole-routine snapshots (routines are tens of kB, so diffs are not
 //   worth their complexity).
 import { EditError, RoutineFormatError } from "./errors";
 import { activeFormationAt, holdEnd, positionsAt } from "./interpolate";
-import { clampToWings } from "./stage";
+import { clampToWings, roundPosition } from "./stage";
 import { beatsToSeconds, snapToBeat } from "./tempo";
 import { MAX_DANCERS, type Dancer, type Formation, type Position, type Routine, type SongInfo, type StageSize, type Stagger, type Tempo } from "./types";
 import { parseRoutine } from "./validate";
@@ -54,10 +56,10 @@ export function defaultSpot(index: number): Position {
   const column = index % DEFAULT_SPOT_COLUMNS;
   const row = Math.floor(index / DEFAULT_SPOT_COLUMNS) % DEFAULT_SPOT_ROWS;
   const layer = Math.floor(index / (DEFAULT_SPOT_COLUMNS * DEFAULT_SPOT_ROWS)) * DEFAULT_SPOT_LAYER_OFFSET;
-  return {
+  return roundPosition({
     x: (column + 1) / (DEFAULT_SPOT_COLUMNS + 1) + layer,
     y: (row + 1) / (DEFAULT_SPOT_ROWS + 1) + layer,
-  };
+  });
 }
 
 export function updateDancer(routine: Routine, dancerId: string, changes: Partial<Pick<Dancer, "name" | "color">>): Routine {
@@ -104,10 +106,14 @@ export function addFormationAt(routine: Routine, options: AddFormationOptions): 
     startSeconds,
     holdSeconds: next ? Math.min(defaultHold, Math.max(0, next.startSeconds - startSeconds - minimumTransitionSeconds(routine))) : defaultHold,
     stagger: null,
-    positions: positionsAt(routine, startSeconds),
+    positions: roundPositions(positionsAt(routine, startSeconds)),
   };
   const formations = [...routine.formations, formation].sort((a, b) => a.startSeconds - b.startSeconds);
   return validated({ ...routine, formations });
+}
+
+function roundPositions(positions: Readonly<Record<string, Position>>): Record<string, Position> {
+  return Object.fromEntries(Object.entries(positions).map(([dancerId, position]) => [dancerId, roundPosition(position)]));
 }
 
 interface FormationTiming {
@@ -143,7 +149,7 @@ interface MoveDancerOptions {
 export function moveDancer(routine: Routine, options: MoveDancerOptions): Routine {
   requireFormation(routine, options.formationId);
   requireDancer(routine, options.dancerId);
-  const position = clampToWings(options.position);
+  const position = roundPosition(clampToWings(options.position));
   return validated(
     replaceFormation(routine, options.formationId, (formation) => ({
       ...formation,

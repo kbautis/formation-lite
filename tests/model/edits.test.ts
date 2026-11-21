@@ -73,6 +73,12 @@ describe("addDancer", () => {
     for (const formation of next.formations) expect(formation.positions["d-3"]).toEqual(defaultSpot(2));
     expectValid(next);
   });
+  it("places a new dancer on a spot rounded to four decimals", () => {
+    // The first spot is 1/6 across, which would otherwise carry float noise.
+    const first = addDancer({ ...base, dancers: [], formations: base.formations.map((f) => ({ ...f, positions: {} })) }, dancer);
+    expect(first.formations[0]?.positions["d-3"]).toEqual({ x: 0.1667, y: 0.2 });
+    expectValid(first);
+  });
   it("rejects a duplicate id", () => {
     expect(() => addDancer(base, { ...dancer, id: "d-1" })).toThrow(EditError);
   });
@@ -128,6 +134,15 @@ describe("addFormationAt", () => {
     expect(added.startSeconds).toBe(3);
     expect(added.positions["d-1"]).toEqual({ x: 0.125, y: 0.25 });
     expectValid(next);
+  });
+  it("rounds the copied positions to four decimals", () => {
+    const next = addFormationAt(untimed, { id: "f-new", seconds: 2.3 });
+    const added = next.formations.find((f) => f.id === "f-new")!;
+    for (const position of Object.values(added.positions)) {
+      expect(position.x).toBe(Number(position.x.toFixed(4)));
+      expect(position.y).toBe(Number(position.y.toFixed(4)));
+    }
+    expect(added.positions["d-1"]!.x).not.toBe(0.25);
   });
   it("inserts in time order with a default name", () => {
     const next = addFormationAt(untimed, { id: "f-new", seconds: 10 });
@@ -202,6 +217,10 @@ describe("moveDancer", () => {
   it("clamps to the wings", () => {
     const next = moveDancer(base, { formationId: "f-1", dancerId: "d-1", position: { x: 5, y: -5 } });
     expect(next.formations[0]?.positions["d-1"]).toEqual({ x: 1.1, y: -0.1 });
+  });
+  it("rounds the new position to four decimals", () => {
+    const next = moveDancer(base, { formationId: "f-1", dancerId: "d-1", position: { x: 0.123456, y: 2 / 3 } });
+    expect(next.formations[0]?.positions["d-1"]).toEqual({ x: 0.1235, y: 0.6667 });
   });
   it("rejects an unknown dancer or formation", () => {
     expect(() => moveDancer(base, { formationId: "f-1", dancerId: "ghost", position: { x: 0, y: 0 } })).toThrow(EditError);

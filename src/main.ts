@@ -1,6 +1,7 @@
 // Entry point: open device storage, build the layout, mount components, start the controller.
 import "./styles.css";
-import { Controller } from "./app/controller";
+import { Controller, type ReplaceDetails } from "./app/controller";
+import { readShareFragment } from "./io/shareLink";
 import { watch } from "./app/store";
 import { SongLoader } from "./playback/songLoader";
 import { isStorageFailure, openDatabase } from "./storage/database";
@@ -10,6 +11,8 @@ import { mountFormationInspector } from "./ui/formationInspector";
 import { mountTransitionPanel } from "./ui/transitionPanel";
 import { mountKeyboard } from "./ui/keyboard";
 import { mountNotice } from "./ui/notice";
+import { replacePromptText } from "./ui/format";
+import { mountShareField } from "./ui/shareField";
 import { mountSidebarToggle } from "./ui/sidebarToggle";
 import { mountSongPanel } from "./ui/songPanel";
 import { mountStagePanel } from "./ui/stagePanel";
@@ -42,6 +45,26 @@ async function requestPersistentStorage(): Promise<void> {
   }
 }
 
+/** The app's own address, without fragment or query: what a share link is built on. */
+function appUrl(): string {
+  return `${location.origin}${location.pathname}`;
+}
+
+/**
+ * Takes a share link out of the address bar, if there is one: the fragment is removed
+ * (keeping path and query) before anything decodes it, so a reload or bookmark never
+ * offers the same snapshot again (docs/architecture.md §4.6).
+ */
+function takeShareFragment(): string | null {
+  const fragment = readShareFragment(location.hash);
+  if (fragment !== null) history.replaceState(history.state, "", `${location.pathname}${location.search}`);
+  return fragment;
+}
+
+function confirmLinkReplace(details: ReplaceDetails): boolean {
+  return window.confirm(replacePromptText("link", details));
+}
+
 async function boot(): Promise<void> {
   const root = requireElement<HTMLElement>(document, "#app");
   const audio = el("audio", { preload: "auto", hidden: true });
@@ -59,6 +82,8 @@ async function boot(): Promise<void> {
   const controller = new Controller({
     database,
     songs,
+    navigator,
+    appUrl,
     newId,
     now: () => new Date(),
     nowMilliseconds: () => performance.now(),
@@ -85,6 +110,7 @@ async function boot(): Promise<void> {
 
   mountToolbar(header, controller);
   mountNotice(notices, controller);
+  mountShareField(notices, controller);
   mountStageView(stageArea, controller);
   mountSongPanel(songSection, controller);
   mountStagePanel(stageSection, controller);
@@ -104,7 +130,12 @@ async function boot(): Promise<void> {
     if (document.visibilityState === "hidden") flush();
   });
 
-  await controller.start();
+  const startupFragment = takeShareFragment();
+  await controller.start(startupFragment === null ? undefined : { fragment: startupFragment, confirmReplace: confirmLinkReplace });
+  window.addEventListener("hashchange", () => {
+    const fragment = takeShareFragment();
+    if (fragment !== null) void controller.importShareLink(fragment, confirmLinkReplace);
+  });
   document.body.dataset.ready = "true";
 }
 

@@ -1,10 +1,11 @@
-// Header: routine name, routine picker, new/import/export/delete, save status.
+// Header: routine name, routine picker, new/open file/export/share link/delete, save status.
 import type { Controller } from "../app/controller";
 import { currentRoutine, type AppState, type SaveStatus } from "../app/state";
 import { watch } from "../app/store";
 import { renameRoutine } from "../model/edits";
 import { ROUTINE_NAME_MAX_LENGTH } from "../model/types";
 import { el, syncInputValue } from "./dom";
+import { replacePromptText } from "./format";
 
 const SAVE_STATUS_TEXT: Record<SaveStatus, string> = {
   saved: "Saved on this device",
@@ -25,6 +26,7 @@ export function mountToolbar(root: HTMLElement, controller: Controller): void {
   const importInput = el("input", { type: "file", accept: ".json,application/json", hidden: true });
   const importButton = el("button", { type: "button" }, ["Open file"]);
   const exportButton = el("button", { type: "button" }, ["Export"]);
+  const shareButton = el("button", { type: "button", title: "Send this routine as a link. Export is still your backup." }, ["Share link"]);
   const deleteButton = el("button", { type: "button", class: "danger", "data-edit-only": true }, ["Delete"]);
   const status = el("span", { class: "save-status", title: "Your work saves in this browser. Export a file as your backup." });
 
@@ -32,7 +34,7 @@ export function mountToolbar(root: HTMLElement, controller: Controller): void {
     el("span", { class: "brand" }, ["formation-lite"]),
     nameInput,
     picker,
-    el("div", { class: "toolbar-actions" }, [newButton, importButton, importInput, exportButton, deleteButton, status]),
+    el("div", { class: "toolbar-actions" }, [newButton, importButton, importInput, exportButton, shareButton, deleteButton, status]),
   );
 
   nameInput.addEventListener("change", () => {
@@ -52,11 +54,13 @@ export function mountToolbar(root: HTMLElement, controller: Controller): void {
     const file = importInput.files?.[0];
     importInput.value = "";
     if (!file) return;
-    void controller.importRoutineFile(file, (name) =>
-      window.confirm(`You already have “${name}” on this device. Replace it with the version in this file?`),
-    );
+    void controller.importRoutineFile(file, (details) => window.confirm(replacePromptText("file", details)));
   });
   exportButton.addEventListener("click", () => controller.exportCurrentRoutine());
+  shareButton.addEventListener("click", () => {
+    shareButton.disabled = true;
+    void controller.shareCurrentRoutine().finally(() => (shareButton.disabled = false));
+  });
   deleteButton.addEventListener("click", () => {
     const { routine } = controller;
     if (window.confirm(`Delete “${routine.name}” and its song from this device? This can't be undone.`)) {

@@ -83,6 +83,24 @@ export function svgToStage(point: Position, aspect: number): Position {
   return { x: point.x / (SVG_STAGE_HEIGHT * aspect), y: 1 - point.y / SVG_STAGE_HEIGHT };
 }
 
+/**
+ * Decimal places kept for a position an edit writes (architecture §4.2). 0.0001 of the
+ * largest stage (500 units) is 0.05 units, finer than a pointer can place a dot, and
+ * dropping float noise roughly halves a share link.
+ */
+export const POSITION_DECIMALS = 4;
+const POSITION_SCALE = 10 ** POSITION_DECIMALS;
+
+/** Rounds a position to POSITION_DECIMALS places (never to negative zero). */
+export function roundPosition(position: Position): Position {
+  return { x: roundCoordinate(position.x), y: roundCoordinate(position.y) };
+}
+
+function roundCoordinate(value: number): number {
+  // Adding 0 turns -0 into 0, so a rounded value serializes the way it compares.
+  return Math.round(value * POSITION_SCALE) / POSITION_SCALE + 0;
+}
+
 export function clampToWings(position: Position): Position {
   return { x: clamp(position.x), y: clamp(position.y) };
 }

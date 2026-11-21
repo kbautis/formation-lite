@@ -44,6 +44,8 @@ export interface AppState {
   readonly showPaths: boolean;
   /** Warn when dancers pass too close mid-transition. A per-device preference, on by default. */
   readonly checkCollisions: boolean;
+  /** A share link to copy by hand, shown when neither the share sheet nor the clipboard worked. */
+  readonly manualShareLink: string | null;
 }
 
 export const MIN_PIXELS_PER_SECOND = 0.5;

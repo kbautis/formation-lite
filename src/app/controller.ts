@@ -14,6 +14,8 @@ import { canRedo, canUndo, createHistory, mapHistory, pushHistory, redo, replace
 import { timelineDurationSeconds } from "../model/timeline";
 import type { Position, Routine, SongInfo } from "../model/types";
 import { downloadRoutine, readRoutineFile } from "../io/files";
+import { deliverLink, type ShareNavigator } from "../io/shareDelivery";
+import { ShareLinkTooLargeError, decodeShareLink, encodeShareLink } from "../io/shareLink";
 import { songDurationsMatch } from "../io/serialize";
 import { AudioClock, type AudioLike } from "../playback/audioClock";
 import { SilentClock, type PlaybackClock } from "../playback/clock";
@@ -34,11 +36,32 @@ const LAST_OPENED_KEY = "formation-lite:last-opened-routine";
 const COLLISION_CHECK_OFF_KEY = "formation-lite:collision-check-off";
 const FALLBACK_AUDIO_MIME_TYPE = "audio/mpeg";
 
+/** What the replace prompt says about an incoming routine whose id is already on this device. */
+export interface ReplaceDetails {
+  readonly existingName: string;
+  /** When the incoming version was last edited (its updatedAt). */
+  readonly incomingUpdatedAt: string;
+  /** The incoming updatedAt is earlier than the copy on this device. */
+  readonly isOlderThanStored: boolean;
+}
+
+export type ConfirmReplace = (details: ReplaceDetails) => boolean;
+
+/** A share link the page was opened with, already removed from the address bar. */
+export interface StartupShareLink {
+  readonly fragment: string;
+  readonly confirmReplace: ConfirmReplace;
+}
+
 export interface ControllerDependencies {
   /** null when IndexedDB is unavailable (private mode, blocked storage). */
   readonly database: IDBDatabase | null;
   /** The song lifecycle (playback/songLoader.ts); its audio element is the playback clock. */
   readonly songs: { load(song: SongSource): Promise<number>; unload(): void; readonly audio: AudioLike };
+  /** Share sheet and clipboard (navigator in the browser). */
+  readonly navigator: ShareNavigator;
+  /** The app's address without fragment or query (origin + pathname); share links start with it. */
+  readonly appUrl: () => string;
   readonly newId: () => string;
   readonly now: () => Date;
   readonly nowMilliseconds: () => number;
@@ -76,6 +99,7 @@ export class Controller {
       zoom: { mode: "fit" },
       showPaths: true,
       checkCollisions: readPreference(COLLISION_CHECK_OFF_KEY) !== "true",
+      manualShareLink: null,
     });
   }
 
@@ -90,11 +114,17 @@ export class Controller {
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
-  /** Opens the last routine used on this device, or the newest, or a new one. */
-  async start(): Promise<void> {
+  /**
+   * Opens the share link the page was opened with, if any; otherwise (or when the link is
+   * rejected or the user keeps their copy) the last routine used on this device, or the
+   * newest, or a new one. The link goes first so a fresh device never saves a blank
+   * routine next to the one it was sent.
+   */
+  async start(shareLink?: StartupShareLink): Promise<void> {
     const database = this.deps.database;
     if (!database) {
       this.notify("error", "This browser isn't letting the app save. Export your routine to keep your work.");
+      if (shareLink) await this.importShareLink(shareLink.fragment, shareLink.confirmReplace);
       return;
     }
     const listing = await listRoutines(database);
@@ -102,6 +132,7 @@ export class Controller {
       this.notify("error", `${listing.corrupt.length} saved routine(s) couldn't be read and were skipped.`);
     }
     this.store.setState({ savedRoutines: listing.routines });
+    if (shareLink && (await this.importShareLink(shareLink.fragment, shareLink.confirmReplace))) return;
     const lastId = readPreference(LAST_OPENED_KEY);
     const routine = listing.routines.find((candidate) => candidate.id === lastId) ?? listing.routines[0];
     if (routine) {
@@ -150,8 +181,8 @@ export class Controller {
     else await this.newRoutine();
   }
 
-  /** Returns false when the file was rejected or the user kept their existing copy. */
-  async importRoutineFile(file: File, confirmReplace: (name: string) => boolean): Promise<boolean> {
+  /** Opens a routine file. Returns false when the file was rejected or the user kept their existing copy. */
+  async importRoutineFile(file: File, confirmReplace: ConfirmReplace): Promise<boolean> {
     let routine: Routine;
     try {
       routine = await readRoutineFile(file);
@@ -160,12 +191,66 @@ export class Controller {
       this.notify("error", `Couldn't open ${file.name}. ${error.message}`);
       return false;
     }
+    return this.importRoutine(routine, confirmReplace);
+  }
+
+  /**
+   * Opens the routine in a share link's fragment. A damaged or tampered link is reported
+   * and changes nothing. Returns false when it was rejected or the user kept their copy.
+   */
+  async importShareLink(fragment: string, confirmReplace: ConfirmReplace): Promise<boolean> {
+    let routine: Routine;
+    try {
+      routine = await decodeShareLink(fragment);
+    } catch (error) {
+      if (!(error instanceof RoutineFormatError)) throw error;
+      this.notify("error", `Couldn't open this link. ${error.message}`);
+      return false;
+    }
+    return this.importRoutine(routine, confirmReplace);
+  }
+
+  /**
+   * The one path for a routine arriving from elsewhere (a file or a link). When its id is
+   * already on this device the user is asked first, told when the incoming version was
+   * edited and whether it is older than theirs. It is saved as it arrived, edit time
+   * included, so the next link of the same routine compares against the sender's time,
+   * not the moment it was opened here. Songs are keyed by id, so a loaded song is kept.
+   */
+  async importRoutine(routine: Routine, confirmReplace: ConfirmReplace): Promise<boolean> {
+    await this.flushPendingSave();
     const existing = this.state.savedRoutines.find((candidate) => candidate.id === routine.id);
-    if (existing && !confirmReplace(existing.name)) return false;
+    if (existing && !confirmReplace(replaceDetails(existing, routine))) return false;
     await this.show(routine);
-    await this.saveNow();
+    await this.write(routine);
     this.notify("info", `Opened “${routine.name}”.`);
     return true;
+  }
+
+  /**
+   * Makes a share link for the routine on screen and hands it to the share sheet, the
+   * clipboard, or (when both fail) a field to copy by hand. Like Export, only the copy
+   * that leaves is stamped with the share time (so teammates can tell which link is
+   * newest); the routine on screen and in storage is left alone, so nothing edited while
+   * the link is encoded can be lost.
+   */
+  async shareCurrentRoutine(): Promise<void> {
+    const routine = touchRoutine(this.routine, this.deps.now());
+    let url: string;
+    try {
+      url = await encodeShareLink(routine, this.deps.appUrl());
+    } catch (error) {
+      if (!(error instanceof ShareLinkTooLargeError)) throw error;
+      this.notify("error", error.message);
+      return;
+    }
+    const result = await deliverLink(this.deps.navigator, { title: routine.name, url });
+    if (result === "copied") this.notify("info", "Link copied. Paste it in your team chat.");
+    if (result === "failed") this.store.setState({ manualShareLink: url });
+  }
+
+  dismissManualShareLink(): void {
+    this.store.setState({ manualShareLink: null });
   }
 
   exportCurrentRoutine(): void {
@@ -528,10 +613,14 @@ export class Controller {
 
   /** Writes the current routine to this device immediately. */
   async saveNow(): Promise<void> {
+    await this.write(touchRoutine(this.routine, this.deps.now()));
+  }
+
+  /** Writes this routine to this device as it is (edit time included), replacing any pending autosave. */
+  private async write(saved: Routine): Promise<void> {
     const database = this.deps.database;
     if (!database) return;
     this.cancelPendingSave();
-    const saved = touchRoutine(this.routine, this.deps.now());
     try {
       await saveRoutine(database, saved);
     } catch (error) {
@@ -543,4 +632,12 @@ export class Controller {
     const others = this.state.savedRoutines.filter((candidate) => candidate.id !== saved.id);
     this.store.setState({ saveStatus: "saved", savedRoutines: [saved, ...others] });
   }
+}
+
+function replaceDetails(existing: Routine, incoming: Routine): ReplaceDetails {
+  return {
+    existingName: existing.name,
+    incomingUpdatedAt: incoming.updatedAt,
+    isOlderThanStored: Date.parse(incoming.updatedAt) < Date.parse(existing.updatedAt),
+  };
 }
