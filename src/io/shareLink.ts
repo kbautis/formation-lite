@@ -11,6 +11,10 @@
 //   "link": length cap → encoding number → alphabet → inflate, read through readLimited,
 //   which cancels the stream once SHARE_DECOMPRESSED_MAX_BYTES is passed (a bomb never
 //   fully inflates) → fatal UTF-8 → JSON → parseRoutine. Nothing is returned until all pass.
+// - readLimited knows nothing about links: past its cap it throws StreamLimitExceededError,
+//   and inflate is the one place that turns stream failures into link messages.
+//   compress reads uncapped: a valid routine (~2.7 MB at most) compresses to well under
+//   that, and the link length is checked once, on the finished link.
 // - Base64 conversion is chunked, so no large array is ever spread into fromCharCode.
 // - Verified in MDN's browser-compat-data 8.1.8 (the MDN site was not reachable from the
 //   build machine): CompressionStream and DecompressionStream accept "deflate" from
@@ -48,6 +52,14 @@ export class ShareLinkTooLargeError extends Error {
   constructor(length: number) {
     super(`This routine is too large for a link (${length.toLocaleString("en-US")} characters) — use Export to send it as a file.`);
     this.name = "ShareLinkTooLargeError";
+  }
+}
+
+/** A stream produced more than readLimited's cap; reading stopped there. */
+export class StreamLimitExceededError extends Error {
+  constructor(maxBytes: number) {
+    super(`The stream produced more than ${maxBytes} bytes.`);
+    this.name = "StreamLimitExceededError";
   }
 }
 
@@ -113,7 +125,7 @@ async function inflate(compressed: Uint8Array<ArrayBuffer>): Promise<Uint8Array>
   try {
     return await readLimited(stream, SHARE_DECOMPRESSED_MAX_BYTES);
   } catch (error) {
-    if (error instanceof RoutineFormatError) throw error;
+    if (error instanceof StreamLimitExceededError) throw linkError("the routine in this link is too large to open.");
     // DecompressionStream rejects the read with a TypeError on corrupt or truncated input.
     throw linkError(DAMAGED_MESSAGE);
   }
@@ -133,7 +145,7 @@ export async function readLimited(stream: ReadableStream<Uint8Array>, maxBytes: 
     total += value.byteLength;
     if (total > maxBytes) {
       await reader.cancel();
-      throw linkError("the routine in this link is too large to open.");
+      throw new StreamLimitExceededError(maxBytes);
     }
     chunks.push(value);
   }

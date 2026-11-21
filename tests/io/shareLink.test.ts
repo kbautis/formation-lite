@@ -4,6 +4,7 @@ import {
   SHARE_LINK_ENCODING,
   SHARE_LINK_MAX_CHARACTERS,
   ShareLinkTooLargeError,
+  StreamLimitExceededError,
   bytesToBase64Url,
   base64UrlToBytes,
   decodeShareLink,
@@ -226,7 +227,9 @@ describe("readLimited", () => {
         cancelled = true;
       },
     });
-    await expect(readLimited(endless, 10 * 1024)).rejects.toThrow(/too large/);
+    const error = await readLimited(endless, 10 * 1024).catch((caught: unknown) => caught);
+    expect(error).toBeInstanceOf(StreamLimitExceededError);
+    expect(error).not.toBeInstanceOf(RoutineFormatError);
     expect(pulls).toBeLessThan(20);
     expect(cancelled).toBe(true);
   });
