@@ -302,6 +302,12 @@ https://<site>/<path>#share=1.<payload>
   step, ending with the copy-by-hand field. This is unverified on Safari. How long a link the common chat apps
   (WhatsApp, iMessage, Discord) deliver intact is not documented anywhere reliable and
   is checked by hand before release; the results are recorded here.
+- **Chat-app results (2026-11-21).** Tested with a 12,059-character link (21 dancers,
+  47 formations, 3:25 of a 3:29 song) made by a local build (`http://localhost:4173/`).
+  - **iMessage:** arrived intact and opened the routine.
+  - **WhatsApp:** did not work. The cause is not known yet: link length, or WhatsApp
+    not making `localhost` addresses clickable. To retest with the GitHub Pages address.
+  - **Discord:** not tested yet.
 
 ## 5. Data Flow
 
