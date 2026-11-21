@@ -60,7 +60,8 @@ formation-lite/
 │   ├── io/
 │   │   ├── serialize.ts          # serializeRoutine, parseRoutineFile, routineFileName, songDurationsMatch (pure)
 │   │   ├── files.ts              # downloadRoutine, readRoutineFile (browser glue)
-│   │   └── shareLink.ts          # encodeShareLink, readShareFragment, decodeShareLink (encoding 1, capped)
+│   │   ├── shareLink.ts          # encodeShareLink, readShareFragment, decodeShareLink (encoding 1, capped)
+│   │   └── shareDelivery.ts      # deliverLink: share sheet → clipboard, reports shared/cancelled/copied/failed
 │   ├── storage/
 │   │   ├── database.ts           # openDatabase(factory), runRequest, StorageError, isStorageFailure
 │   │   ├── routines.ts           # saveRoutine, listRoutines, deleteRoutineWithSong

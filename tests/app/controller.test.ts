@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { IDBFactory } from "fake-indexeddb";
-import { Controller, type ReplaceDetails, type ShareNavigator } from "../../src/app/controller";
+import { Controller, type ReplaceDetails } from "../../src/app/controller";
+import type { ShareNavigator } from "../../src/io/shareDelivery";
 import { decodeShareLink, encodeShareLink, readShareFragment } from "../../src/io/shareLink";
 import type { Routine } from "../../src/model/types";
 import { openDatabase } from "../../src/storage/database";
@@ -564,7 +565,8 @@ describe("Controller.shareCurrentRoutine", () => {
     shareNavigator.useShareSheet("accept");
     const controller = makeController();
     await controller.start();
-    expect(await controller.shareCurrentRoutine()).toBe("shared");
+    await controller.shareCurrentRoutine();
+    expect(controller.store.getState().notice?.text ?? "").not.toMatch(/copied/i);
     const [data] = shareNavigator.shared;
     expect(data?.title).toBe("Regionals 2027");
     const routine = await sharedRoutine(data!.url!);
@@ -598,7 +600,8 @@ describe("Controller.shareCurrentRoutine", () => {
     shareNavigator.useShareSheet("cancel");
     const controller = makeController();
     await controller.start();
-    expect(await controller.shareCurrentRoutine()).toBe("cancelled");
+    await controller.shareCurrentRoutine();
+    expect(controller.store.getState().notice?.text ?? "").not.toMatch(/copied/i);
     expect(shareNavigator.copied).toHaveLength(0);
     expect(controller.store.getState().manualShareLink).toBeNull();
   });
@@ -606,7 +609,7 @@ describe("Controller.shareCurrentRoutine", () => {
   it("copies the link when there is no share sheet", async () => {
     const controller = makeController();
     await controller.start();
-    expect(await controller.shareCurrentRoutine()).toBe("copied");
+    await controller.shareCurrentRoutine();
     expect(shareNavigator.copied).toHaveLength(1);
     expect((await sharedRoutine(shareNavigator.copied[0]!)).id).toBe(controller.routine.id);
     expect(controller.store.getState().notice?.text).toMatch(/copied/i);
@@ -616,14 +619,17 @@ describe("Controller.shareCurrentRoutine", () => {
     shareNavigator.useShareSheet("fail");
     const controller = makeController();
     await controller.start();
-    expect(await controller.shareCurrentRoutine()).toBe("copied");
+    await controller.shareCurrentRoutine();
+    expect(shareNavigator.copied).toHaveLength(1);
+    expect(controller.store.getState().notice?.text).toMatch(/copied/i);
   });
 
   it("shows the link to copy by hand when the clipboard is refused", async () => {
     shareNavigator.clipboardWorks = false;
     const controller = makeController();
     await controller.start();
-    expect(await controller.shareCurrentRoutine()).toBe("manual");
+    await controller.shareCurrentRoutine();
+    expect(controller.store.getState().notice?.text ?? "").not.toMatch(/copied/i);
     const link = controller.store.getState().manualShareLink;
     expect(link?.startsWith(`${APP_URL}#share=1.`)).toBe(true);
     controller.dismissManualShareLink();
@@ -646,7 +652,8 @@ describe("Controller.shareCurrentRoutine", () => {
     shareNavigator.useShareSheet("accept");
     const controller = makeController();
     await controller.start();
-    expect(await controller.shareCurrentRoutine()).toBe("too-large");
+    await controller.shareCurrentRoutine();
+    expect(controller.store.getState().manualShareLink).toBeNull();
     expect(controller.store.getState().notice?.text).toMatch(/Export/);
     expect(shareNavigator.shared).toHaveLength(0);
     expect(shareNavigator.copied).toHaveLength(0);

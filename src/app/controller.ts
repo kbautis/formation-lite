@@ -14,6 +14,7 @@ import { canRedo, canUndo, createHistory, mapHistory, pushHistory, redo, replace
 import { timelineDurationSeconds } from "../model/timeline";
 import type { Position, Routine, SongInfo } from "../model/types";
 import { downloadRoutine, readRoutineFile } from "../io/files";
+import { deliverLink, type ShareNavigator } from "../io/shareDelivery";
 import { ShareLinkTooLargeError, decodeShareLink, encodeShareLink } from "../io/shareLink";
 import { songDurationsMatch } from "../io/serialize";
 import { AudioClock, type AudioLike } from "../playback/audioClock";
@@ -51,16 +52,6 @@ export interface StartupShareLink {
   readonly fragment: string;
   readonly confirmReplace: ConfirmReplace;
 }
-
-/** The parts of `navigator` that sharing uses; each may be missing in a given browser. */
-export interface ShareNavigator {
-  canShare?(data: ShareData): boolean;
-  share?(data: ShareData): Promise<void>;
-  readonly clipboard?: { writeText(text: string): Promise<void> };
-}
-
-/** How a share link reached the user: share sheet, clipboard, a field to copy by hand, or not at all. */
-export type ShareOutcome = "shared" | "cancelled" | "copied" | "manual" | "too-large";
 
 export interface ControllerDependencies {
   /** null when IndexedDB is unavailable (private mode, blocked storage). */
@@ -243,7 +234,7 @@ export class Controller {
    * newest); the routine on screen and in storage is left alone, so nothing edited while
    * the link is encoded can be lost.
    */
-  async shareCurrentRoutine(): Promise<ShareOutcome> {
+  async shareCurrentRoutine(): Promise<void> {
     const routine = touchRoutine(this.routine, this.deps.now());
     let url: string;
     try {
@@ -251,31 +242,11 @@ export class Controller {
     } catch (error) {
       if (!(error instanceof ShareLinkTooLargeError)) throw error;
       this.notify("error", error.message);
-      return "too-large";
+      return;
     }
-    return this.deliverShareLink({ title: routine.name, url });
-  }
-
-  private async deliverShareLink(data: { readonly title: string; readonly url: string }): Promise<ShareOutcome> {
-    const navigator = this.deps.navigator;
-    if (navigator.share && navigator.canShare?.(data)) {
-      try {
-        await navigator.share(data);
-        return "shared";
-      } catch (error) {
-        // A cancelled sheet rejects with AbortError: the user chose not to share.
-        if (isAbortError(error)) return "cancelled";
-      }
-    }
-    try {
-      if (!navigator.clipboard) throw new Error("no clipboard");
-      await navigator.clipboard.writeText(data.url);
-      this.notify("info", "Link copied. Paste it in your team chat.");
-      return "copied";
-    } catch {
-      this.store.setState({ manualShareLink: data.url });
-      return "manual";
-    }
+    const result = await deliverLink(this.deps.navigator, { title: routine.name, url });
+    if (result === "copied") this.notify("info", "Link copied. Paste it in your team chat.");
+    if (result === "failed") this.store.setState({ manualShareLink: url });
   }
 
   dismissManualShareLink(): void {
@@ -669,8 +640,4 @@ function replaceDetails(existing: Routine, incoming: Routine): ReplaceDetails {
     incomingUpdatedAt: incoming.updatedAt,
     isOlderThanStored: Date.parse(incoming.updatedAt) < Date.parse(existing.updatedAt),
   };
-}
-
-function isAbortError(error: unknown): boolean {
-  return typeof error === "object" && error !== null && "name" in error && error.name === "AbortError";
 }
