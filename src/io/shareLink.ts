@@ -3,18 +3,20 @@
 //   fragment | null, decodeShareLink(fragment) → Routine. main.ts and the controller
 //   own location, history and delivery; this file only converts.
 // - Encoding 1 is a public contract: "#share=1." + base64url (RFC 4648 §5, no padding)
-//   of deflate-raw of the compact routine JSON. A new layout gets a new encoding number
+//   of zlib "deflate" (RFC 1950, with its Adler-32 checksum) of the compact routine JSON.
+//   Raw deflate was dropped before release: with no checksum, ~3% of one-character
+//   changes decoded into valid but different routines. A new layout gets a new encoding number
 //   and encoding 1 keeps decoding. The routine inside versions itself through parseRoutine.
 // - Decoding runs cheapest check first and every failure is a RoutineFormatError at path
 //   "link": length cap → encoding number → alphabet → inflate, read through readLimited,
 //   which cancels the stream once SHARE_DECOMPRESSED_MAX_BYTES is passed (a bomb never
 //   fully inflates) → fatal UTF-8 → JSON → parseRoutine. Nothing is returned until all pass.
 // - Base64 conversion is chunked, so no large array is ever spread into fromCharCode.
-// - Verified 2026-11-12 in MDN's browser-compat-data 8.1.8 (the MDN site was not
-//   reachable from the build machine): CompressionStream and DecompressionStream accept
-//   "deflate-raw" from Chrome 103, Firefox 113 and Safari 16.4 (desktop and iOS).
-// - Verified in the smoke test (Chromium): a cut-off deflate-raw stream makes the reader
-//   reject instead of ending quietly, so a truncated link is reported as cut off.
+// - Verified in MDN's browser-compat-data 8.1.8 (the MDN site was not reachable from the
+//   build machine): CompressionStream and DecompressionStream accept "deflate" from
+//   Chrome 80, Firefox 113 and Safari 16.4 (desktop and iOS).
+// - Verified in the smoke test (Chromium) and unit tests (Node): a cut-off or altered
+//   stream makes the reader reject, so such a link is reported as damaged or cut off.
 import { RoutineFormatError } from "../model/errors";
 import type { Routine } from "../model/types";
 import { parseRoutine } from "../model/validate";
@@ -29,7 +31,8 @@ export const SHARE_DECOMPRESSED_MAX_BYTES = 4 * 1024 * 1024;
 const SHARE_FRAGMENT_PREFIX = "#share=";
 const ENCODING_SEPARATOR = ".";
 const LINK_ERROR_PATH = "link";
-const COMPRESSION_FORMAT = "deflate-raw";
+/** zlib (RFC 1950): deflate plus an Adler-32 checksum, so a damaged link fails instead of decoding to other data. */
+const COMPRESSION_FORMAT = "deflate";
 const ENCODING_NUMBER_PATTERN = /^[0-9]+$/;
 const BASE64URL_PATTERN = /^[A-Za-z0-9_-]+$/;
 /** A base64 string can never have length ≡ 1 (mod 4); such a payload was cut mid-character. */

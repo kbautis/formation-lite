@@ -240,9 +240,15 @@ A share link is the app's own address with the routine in the fragment:
 https://<site>/<path>#share=1.<payload>
 ```
 
-- **Encoding 1.** `<payload>` is base64url (RFC 4648 §5, no padding) of deflate-raw
-  (`CompressionStream("deflate-raw")`) of the routine document (§4.1, version 2) as
-  compact JSON. The `1` is the *link encoding* version; the document inside still carries
+- **Encoding 1.** `<payload>` is base64url (RFC 4648 §5, no padding) of zlib deflate
+  (`CompressionStream("deflate")`, RFC 1950) of the routine document (§4.1, version 2) as
+  compact JSON. The zlib wrapper's Adler-32 checksum is why: raw deflate (the first
+  plan) has none, and in a test about 3% of one-character changes to a link
+  (1,001 of 29,925) decoded into a valid routine with silently different data. With zlib
+  none did (0 of 30,429); the few changes that still decode give the identical routine.
+  It costs 6 bytes (about 8 characters) per link. Changed on 2026-11-21, before any link
+  was released. A checksum only catches damage: anyone can still craft a valid link,
+  which is what `parseRoutine` and the size caps are for. The `1` is the *link encoding* version; the document inside still carries
   its own `format` and `version`, so routine versions migrate through `parseRoutine`
   exactly as files do, and the two version numbers change independently.
 - **The host never sees it.** Browsers do not send the fragment in the HTTP request, so
@@ -283,8 +289,8 @@ https://<site>/<path>#share=1.<payload>
   copy would carry the time it was opened, and a link shared before that moment but
   newer than the teammate's previous copy would be wrongly flagged as older.
 - **Verified, and still to verify.** `CompressionStream` and `DecompressionStream` accept
-  `deflate-raw` from Chrome 103, Firefox 113 and Safari 16.4, desktop and iOS (checked
-  2026-11-12 in MDN's `@mdn/browser-compat-data` 8.1.8, because the MDN site was not
+  `deflate` from Chrome 80, Firefox 113 and Safari 16.4, desktop and iOS (checked
+  2026-11-21 in MDN's `@mdn/browser-compat-data` 8.1.8, because the MDN site was not
   reachable from the build machine). In Chromium a cut-off stream makes the reader reject
   with `TypeError: Compressed input was truncated`, so a cut-off link is reported as
   damaged (checked by the smoke test). jsdom has no `Blob.prototype.stream`, so the

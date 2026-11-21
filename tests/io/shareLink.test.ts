@@ -53,9 +53,9 @@ function fragmentOf(link: string): string {
   return fragment;
 }
 
-/** deflate-raw of arbitrary bytes, as a share fragment, to build crafted links. */
+/** The encoding 1 compression (zlib deflate) of arbitrary bytes, as a share fragment, to build crafted links. */
 async function craftedFragment(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
-  const compressed = await readLimited(streamOf(bytes).pipeThrough(new CompressionStream("deflate-raw")), Number.POSITIVE_INFINITY);
+  const compressed = await readLimited(streamOf(bytes).pipeThrough(new CompressionStream("deflate")), Number.POSITIVE_INFINITY);
   return `${SHARE_LINK_ENCODING}.${bytesToBase64Url(compressed)}`;
 }
 
@@ -157,6 +157,25 @@ describe("decodeShareLink rejections", () => {
     const swapped = fragment[middle] === "A" ? "B" : "A";
     await rejection(decodeShareLink(`${fragment.slice(0, middle)}${swapped}${fragment.slice(middle + 1)}`));
   });
+
+  it("never opens a one-character change as a different routine", async () => {
+    // Raw deflate has no checksum, so ~3% of such changes used to decode into valid,
+    // silently different routines. The zlib wrapper's Adler-32 catches them.
+    const routine = validRoutineInput();
+    const fragment = fragmentOf(await encodeShareLink(routine, BASE_URL));
+    const substitutes = "AQgw09-_";
+    for (let index = 2; index < fragment.length; index++) {
+      for (const substitute of substitutes) {
+        if (substitute === fragment[index]) continue;
+        const changed = `${fragment.slice(0, index)}${substitute}${fragment.slice(index + 1)}`;
+        const decoded = await decodeShareLink(changed).catch((error: unknown) => {
+          expect(error).toBeInstanceOf(RoutineFormatError);
+          return null;
+        });
+        if (decoded !== null) expect(decoded, `change at ${index} to ${substitute}`).toEqual(routine);
+      }
+    }
+  }, 60_000);
 
   it("rejects bytes that do not inflate", async () => {
     const error = await rejection(decodeShareLink(`1.${bytesToBase64Url(new Uint8Array([0xff, 0xff, 0xff, 0xff, 0xff, 0xff]))}`));
