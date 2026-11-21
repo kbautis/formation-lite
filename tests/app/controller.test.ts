@@ -514,6 +514,46 @@ describe("Controller.importShareLink", () => {
   });
 });
 
+describe("Controller.start with a share link", () => {
+  async function fragmentFor(routine: Routine): Promise<string> {
+    return readShareFragment(new URL(await encodeShareLink(routine, APP_URL)).hash)!;
+  }
+
+  it("opens the link on a fresh device without saving a blank routine first", async () => {
+    const controller = makeController();
+    await controller.start({ fragment: await fragmentFor(validRoutineInput()), confirmReplace: answering(true).confirm });
+    expect(controller.routine.id).toBe("routine-1");
+    expect((await listRoutines(database)).routines.map((routine) => routine.id)).toEqual(["routine-1"]);
+    expect(controller.store.getState().savedRoutines.map((routine) => routine.id)).toEqual(["routine-1"]);
+  });
+
+  it("falls back to a new routine when the link is rejected", async () => {
+    const controller = makeController();
+    const fragment = await fragmentFor(validRoutineInput());
+    await controller.start({ fragment: `${fragment.slice(0, 40)}${fragment.slice(41)}`, confirmReplace: answering(true).confirm });
+    expect(controller.store.getState().notice?.text).toMatch(/^Couldn't open this link\./);
+    expect((await listRoutines(database)).routines.map((routine) => routine.name)).toEqual(["Untitled routine"]);
+  });
+
+  it("opens the last routine when the user keeps their copy", async () => {
+    await saveRoutine(database, validRoutineInput());
+    await saveRoutine(database, { ...validRoutineInput(), id: "routine-2", name: "Other" });
+    localStorage.setItem("formation-lite:last-opened-routine", "routine-2");
+    const controller = makeController();
+    await controller.start({ fragment: await fragmentFor({ ...validRoutineInput(), name: "Theirs" }), confirmReplace: answering(false).confirm });
+    expect(controller.routine.id).toBe("routine-2");
+    expect((await storedRoutine("routine-1"))?.name).toBe("Regionals 2027");
+    expect((await listRoutines(database)).routines).toHaveLength(2);
+  });
+
+  it("still opens the link when this browser can't save", async () => {
+    database = null as unknown as IDBDatabase;
+    const controller = makeController();
+    await controller.start({ fragment: await fragmentFor(validRoutineInput()), confirmReplace: answering(true).confirm });
+    expect(controller.routine.id).toBe("routine-1");
+  });
+});
+
 describe("Controller.shareCurrentRoutine", () => {
   async function sharedRoutine(url: string): Promise<Routine> {
     return decodeShareLink(readShareFragment(new URL(url).hash)!);

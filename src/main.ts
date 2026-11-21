@@ -1,6 +1,6 @@
 // Entry point: open device storage, build the layout, mount components, start the controller.
 import "./styles.css";
-import { Controller } from "./app/controller";
+import { Controller, type ReplaceDetails } from "./app/controller";
 import { readShareFragment } from "./io/shareLink";
 import { watch } from "./app/store";
 import { SongLoader } from "./playback/songLoader";
@@ -51,15 +51,18 @@ function appUrl(): string {
 }
 
 /**
- * Opens a share link in the address bar, if there is one. The fragment is removed first
- * (keeping path and query), so a reload or bookmark never offers the same snapshot again,
- * and only then decoded and imported (docs/architecture.md §4.6).
+ * Takes a share link out of the address bar, if there is one: the fragment is removed
+ * (keeping path and query) before anything decodes it, so a reload or bookmark never
+ * offers the same snapshot again (docs/architecture.md §4.6).
  */
-async function openShareLinkInAddressBar(controller: Controller): Promise<void> {
+function takeShareFragment(): string | null {
   const fragment = readShareFragment(location.hash);
-  if (fragment === null) return;
-  history.replaceState(history.state, "", `${location.pathname}${location.search}`);
-  await controller.importShareLink(fragment, (details) => window.confirm(replacePromptText("link", details)));
+  if (fragment !== null) history.replaceState(history.state, "", `${location.pathname}${location.search}`);
+  return fragment;
+}
+
+function confirmLinkReplace(details: ReplaceDetails): boolean {
+  return window.confirm(replacePromptText("link", details));
 }
 
 async function boot(): Promise<void> {
@@ -127,9 +130,12 @@ async function boot(): Promise<void> {
     if (document.visibilityState === "hidden") flush();
   });
 
-  await controller.start();
-  await openShareLinkInAddressBar(controller);
-  window.addEventListener("hashchange", () => void openShareLinkInAddressBar(controller));
+  const startupFragment = takeShareFragment();
+  await controller.start(startupFragment === null ? undefined : { fragment: startupFragment, confirmReplace: confirmLinkReplace });
+  window.addEventListener("hashchange", () => {
+    const fragment = takeShareFragment();
+    if (fragment !== null) void controller.importShareLink(fragment, confirmLinkReplace);
+  });
   document.body.dataset.ready = "true";
 }
 

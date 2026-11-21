@@ -264,10 +264,15 @@ https://<site>/<path>#share=1.<payload>
   about 2.7 MB as compact UTF-8) coming out of the stream, at which point reading stops, so a compression
   bomb cannot exhaust memory; invalid UTF-8 (`TextDecoder` with `fatal: true`); invalid
   JSON; then `parseRoutine`. Nothing is written until all of it passes.
-- **Opening a link.** At startup (after `controller.start()`) and on `hashchange`,
-  `main.ts` reads `location.hash`. If it holds a share link, it first removes it with
-  `history.replaceState` (keeping path and query), so a reload or bookmark never offers
-  the snapshot again, then decodes it and hands the routine to the controller's single
+- **Opening a link.** At startup and on `hashchange`, `main.ts` reads `location.hash`.
+  If it holds a share link, it first removes it with `history.replaceState` (keeping path
+  and query), so a reload or bookmark never offers the snapshot again. At startup the
+  fragment is passed to `controller.start(shareLink)`, which lists the device's routines
+  and opens the link *before* falling back to the last-opened routine or a new one, so a
+  fresh device never saves a blank "Untitled routine" next to the one it was sent
+  (revised 2026-11-21; first built as "after `controller.start()`"). A rejected link or a
+  kept copy falls back as usual. On `hashchange` it goes to `importShareLink`. Both
+  decode and hand the routine to the controller's single
   `importRoutine(routine, confirmReplace)` path, which file import uses too. When a
   routine with the same id is on the device, the prompt names it, says when the link's
   version was edited (its `updatedAt`), and adds "This link is older than your copy"

@@ -46,6 +46,12 @@ export interface ReplaceDetails {
 
 export type ConfirmReplace = (details: ReplaceDetails) => boolean;
 
+/** A share link the page was opened with, already removed from the address bar. */
+export interface StartupShareLink {
+  readonly fragment: string;
+  readonly confirmReplace: ConfirmReplace;
+}
+
 /** The parts of `navigator` that sharing uses; each may be missing in a given browser. */
 export interface ShareNavigator {
   canShare?(data: ShareData): boolean;
@@ -117,11 +123,17 @@ export class Controller {
 
   // ── Lifecycle ─────────────────────────────────────────────────────────────
 
-  /** Opens the last routine used on this device, or the newest, or a new one. */
-  async start(): Promise<void> {
+  /**
+   * Opens the share link the page was opened with, if any; otherwise (or when the link is
+   * rejected or the user keeps their copy) the last routine used on this device, or the
+   * newest, or a new one. The link goes first so a fresh device never saves a blank
+   * routine next to the one it was sent.
+   */
+  async start(shareLink?: StartupShareLink): Promise<void> {
     const database = this.deps.database;
     if (!database) {
       this.notify("error", "This browser isn't letting the app save. Export your routine to keep your work.");
+      if (shareLink) await this.importShareLink(shareLink.fragment, shareLink.confirmReplace);
       return;
     }
     const listing = await listRoutines(database);
@@ -129,6 +141,7 @@ export class Controller {
       this.notify("error", `${listing.corrupt.length} saved routine(s) couldn't be read and were skipped.`);
     }
     this.store.setState({ savedRoutines: listing.routines });
+    if (shareLink && (await this.importShareLink(shareLink.fragment, shareLink.confirmReplace))) return;
     const lastId = readPreference(LAST_OPENED_KEY);
     const routine = listing.routines.find((candidate) => candidate.id === lastId) ?? listing.routines[0];
     if (routine) {

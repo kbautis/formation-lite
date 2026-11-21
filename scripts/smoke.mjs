@@ -470,6 +470,7 @@ async function main() {
     check((await linkPage.locator(".dancer").count()) === 3 && (await linkPage.locator(".formation-block").count()) === 2, "the linked routine shows its dancers and formations");
     check((await linkPage.locator(".song-name[data-state='missing']").count()) === 1, "the song is not in the link; the app asks for it by name");
     check(linkDialogs.length === 0, "opening a routine new to this device does not ask to replace anything");
+    check((await storedRoutines(linkPage)).length === 1 && (await linkPage.locator(".routine-picker option").count()) === 1, "a link on a fresh profile saves only the linked routine, no blank one");
 
     const routinesBeforeReload = (await storedRoutines(linkPage)).length;
     await linkPage.reload();
